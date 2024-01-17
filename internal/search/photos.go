@@ -47,6 +47,150 @@ func PhotoIds(f form.SearchPhotos) (files PhotoResults, count int, err error) {
 	return searchPhotos(f, nil, "photos.id, photos.photo_uid, files.file_uid")
 }
 
+func initiateDB(sess *entity.Session, resultCols string) (db *gorm.DB) {
+	s := UnscopedDb().Table(entity.File{}.TableName()).Select(resultCols).
+		Joins("JOIN photos ON files.photo_id = photos.id AND files.media_id IS NOT NULL").
+		Joins("LEFT JOIN cameras ON photos.camera_id = cameras.id").
+		Joins("LEFT JOIN lenses ON photos.lens_id = lenses.id").
+		Joins("LEFT JOIN places ON photos.place_id = places.id")
+	return s
+}
+
+func handleScope(s *gorm.DB, f *form.SearchPhotos) (err error) {
+	if txt.NotEmpty(f.Scope) {
+		f.Scope = strings.ToLower(f.Scope)
+
+		if idType, idPrefix := rnd.IdType(f.Scope); idType != rnd.TypeUID || idPrefix != entity.AlbumUID {
+			return ErrInvalidId
+		} else if a, err := entity.CachedAlbumByUID(f.Scope); err != nil || a.AlbumUID == "" {
+			return ErrInvalidId
+		} else if a.AlbumFilter == "" {
+			s = s.Joins("JOIN photos_albums ON photos_albums.photo_uid = files.photo_uid").
+				Where("photos_albums.hidden = 0 AND photos_albums.album_uid = ?", a.AlbumUID)
+		} else if formErr := form.Unserialize(f, a.AlbumFilter); formErr != nil {
+			log.Debugf("search: %s (%s)", clean.Error(formErr), clean.Log(a.AlbumFilter))
+			return ErrBadFilter
+		} else {
+			f.Filter = a.AlbumFilter
+			s = s.Where("files.photo_uid NOT IN (SELECT photo_uid FROM photos_albums pa WHERE pa.hidden = 1 AND pa.album_uid = ?)", a.AlbumUID)
+		}
+
+		// Enforce search distance range (km).
+		if f.Dist <= 0 {
+			f.Dist = geo.DefaultDist
+		} else if f.Dist > geo.ScopeDistLimit {
+			f.Dist = geo.ScopeDistLimit
+		}
+	} else {
+		f.Scope = ""
+	}
+	return nil
+}
+
+func handleSessionAndPermissions(s *gorm.DB, sess *entity.Session, f form.SearchPhotos) (err error) {
+	if sess != nil {
+		user := sess.User()
+		aclRole := user.AclRole()
+
+		// Exclude private content.
+		if acl.Resources.Deny(acl.ResourcePhotos, aclRole, acl.AccessPrivate) {
+			f.Public = true
+			f.Private = false
+		}
+
+		// Exclude archived content.
+		if acl.Resources.Deny(acl.ResourcePhotos, aclRole, acl.ActionDelete) {
+			f.Archived = false
+			f.Review = false
+		}
+
+		// Exclude hidden files.
+		if acl.Resources.Deny(acl.ResourceFiles, aclRole, acl.AccessAll) {
+			f.Hidden = false
+		}
+
+		// Visitors and other restricted users can only access shared content.
+		if f.Scope != "" && !sess.HasShare(f.Scope) && (sess.User().HasSharedAccessOnly(acl.ResourcePhotos) || sess.NotRegistered()) ||
+			f.Scope == "" && acl.Resources.Deny(acl.ResourcePhotos, aclRole, acl.ActionSearch) {
+			event.AuditErr([]string{sess.IP(), "session %s", "%s %s as %s", "denied"}, sess.RefID, acl.ActionSearch.String(), string(acl.ResourcePhotos), aclRole)
+			return ErrForbidden
+		}
+
+		// Limit results for external users.
+		if f.Scope == "" && acl.Resources.DenyAll(acl.ResourcePhotos, aclRole, acl.Permissions{acl.AccessAll, acl.AccessLibrary}) {
+			sharedAlbums := "photos.photo_uid IN (SELECT photo_uid FROM photos_albums WHERE hidden = 0 AND missing = 0 AND album_uid IN (?)) OR "
+
+			if sess.IsVisitor() || sess.NotRegistered() {
+				s = s.Where(sharedAlbums+"photos.published_at > ?", sess.SharedUIDs(), entity.TimeStamp())
+			} else if basePath := user.GetBasePath(); basePath == "" {
+				s = s.Where(sharedAlbums+"photos.created_by = ? OR photos.published_at > ?", sess.SharedUIDs(), user.UserUID, entity.TimeStamp())
+			} else {
+				s = s.Where(sharedAlbums+"photos.created_by = ? OR photos.published_at > ? OR photos.photo_path = ? OR photos.photo_path LIKE ?",
+					sess.SharedUIDs(), user.UserUID, entity.TimeStamp(), basePath, basePath+"/%")
+			}
+		}
+	}
+
+	return nil
+}
+
+func handleOrder(s *gorm.DB, f form.SearchPhotos) (err error) {
+	switch f.Order {
+	case sortby.Edited:
+		s = s.Where("photos.edited_at IS NOT NULL").Order("photos.edited_at DESC, files.media_id")
+	case sortby.Relevance:
+		if f.Label != "" {
+			s = s.Order("photos.photo_quality DESC, photos_labels.uncertainty ASC, files.time_index")
+		} else {
+			s = s.Order("photos.photo_quality DESC, files.time_index")
+		}
+	case sortby.Duration:
+		s = s.Order("photos.photo_duration DESC, files.time_index")
+	case sortby.Size:
+		s = s.Order("files.file_size DESC, files.time_index")
+	case sortby.Newest:
+		s = s.Order("files.time_index")
+	case sortby.Oldest:
+		s = s.Order("files.photo_taken_at, files.media_id")
+	case sortby.Similar:
+		s = s.Where("files.file_diff > 0")
+		s = s.Order("photos.photo_color, photos.cell_id, files.file_diff, files.photo_id, files.time_index")
+	case sortby.Name:
+		s = s.Order("photos.photo_path, photos.photo_name, files.time_index")
+	case sortby.Random:
+		s = s.Order(sortby.RandomExpr(s.Dialect()))
+	case sortby.Default, sortby.Imported, sortby.Added:
+		s = s.Order("files.media_id")
+	default:
+		return ErrBadSortOrder
+	}
+
+	return nil
+}
+
+func handleExcludeErrorFiles(s *gorm.DB, f form.SearchPhotos) {
+	if !f.Hidden {
+		if f.Error {
+			s = s.Where("files.file_error <> ''")
+		} else {
+			s = s.Where("files.file_error = ''")
+		}
+	}
+}
+
+func handlePrimaryFiles(s *gorm.DB, f form.SearchPhotos) {
+	if f.Primary {
+		s = s.Where("files.file_primary = 1")
+	} else if f.Order == sortby.Similar {
+		s = s.Where("files.file_primary = 1 OR files.media_type = ?", media.Video)
+	} else if f.Order == sortby.Random {
+		s = s.Where("files.file_primary = 1 AND photos.photo_type NOT IN ('live','video') OR photos.photo_type IN ('live','video') AND files.media_type IN ('live','video')")
+	} else {
+		// Otherwise, find all matching media except sidecar files.
+		s = s.Where("files.file_sidecar = 0")
+	}
+}
+
 // searchPhotos finds photos based on the search form and user session then returns them as PhotoResults.
 func searchPhotos(f form.SearchPhotos, sess *entity.Session, resultCols string) (results PhotoResults, count int, err error) {
 	start := time.Now()
@@ -79,11 +223,7 @@ func searchPhotos(f form.SearchPhotos, sess *entity.Session, resultCols string) 
 	}
 
 	// Specify table names and joins.
-	s := UnscopedDb().Table(entity.File{}.TableName()).Select(resultCols).
-		Joins("JOIN photos ON files.photo_id = photos.id AND files.media_id IS NOT NULL").
-		Joins("LEFT JOIN cameras ON photos.camera_id = cameras.id").
-		Joins("LEFT JOIN lenses ON photos.lens_id = lenses.id").
-		Joins("LEFT JOIN places ON photos.place_id = places.id")
+	s := initiateDB(sess, resultCols)
 
 	// Accept the album UID as scope for backward compatibility.
 	if rnd.IsUID(f.Album, entity.AlbumUID) {
@@ -95,129 +235,28 @@ func searchPhotos(f form.SearchPhotos, sess *entity.Session, resultCols string) 
 	}
 
 	// Limit search results to a specific UID scope, e.g. when sharing.
-	if txt.NotEmpty(f.Scope) {
-		f.Scope = strings.ToLower(f.Scope)
-
-		if idType, idPrefix := rnd.IdType(f.Scope); idType != rnd.TypeUID || idPrefix != entity.AlbumUID {
-			return PhotoResults{}, 0, ErrInvalidId
-		} else if a, err := entity.CachedAlbumByUID(f.Scope); err != nil || a.AlbumUID == "" {
-			return PhotoResults{}, 0, ErrInvalidId
-		} else if a.AlbumFilter == "" {
-			s = s.Joins("JOIN photos_albums ON photos_albums.photo_uid = files.photo_uid").
-				Where("photos_albums.hidden = 0 AND photos_albums.album_uid = ?", a.AlbumUID)
-		} else if formErr := form.Unserialize(&f, a.AlbumFilter); formErr != nil {
-			log.Debugf("search: %s (%s)", clean.Error(formErr), clean.Log(a.AlbumFilter))
-			return PhotoResults{}, 0, ErrBadFilter
-		} else {
-			f.Filter = a.AlbumFilter
-			s = s.Where("files.photo_uid NOT IN (SELECT photo_uid FROM photos_albums pa WHERE pa.hidden = 1 AND pa.album_uid = ?)", a.AlbumUID)
-		}
-
-		// Enforce search distance range (km).
-		if f.Dist <= 0 {
-			f.Dist = geo.DefaultDist
-		} else if f.Dist > geo.ScopeDistLimit {
-			f.Dist = geo.ScopeDistLimit
-		}
-	} else {
-		f.Scope = ""
+	e := handleScope(s, &f)
+	if e != nil {
+		return PhotoResults{}, 0, e
 	}
 
 	// Check session permissions and apply as needed.
-	if sess != nil {
-		user := sess.User()
-		aclRole := user.AclRole()
-
-		// Exclude private content.
-		if acl.Resources.Deny(acl.ResourcePhotos, aclRole, acl.AccessPrivate) {
-			f.Public = true
-			f.Private = false
-		}
-
-		// Exclude archived content.
-		if acl.Resources.Deny(acl.ResourcePhotos, aclRole, acl.ActionDelete) {
-			f.Archived = false
-			f.Review = false
-		}
-
-		// Exclude hidden files.
-		if acl.Resources.Deny(acl.ResourceFiles, aclRole, acl.AccessAll) {
-			f.Hidden = false
-		}
-
-		// Visitors and other restricted users can only access shared content.
-		if f.Scope != "" && !sess.HasShare(f.Scope) && (sess.User().HasSharedAccessOnly(acl.ResourcePhotos) || sess.NotRegistered()) ||
-			f.Scope == "" && acl.Resources.Deny(acl.ResourcePhotos, aclRole, acl.ActionSearch) {
-			event.AuditErr([]string{sess.IP(), "session %s", "%s %s as %s", "denied"}, sess.RefID, acl.ActionSearch.String(), string(acl.ResourcePhotos), aclRole)
-			return PhotoResults{}, 0, ErrForbidden
-		}
-
-		// Limit results for external users.
-		if f.Scope == "" && acl.Resources.DenyAll(acl.ResourcePhotos, aclRole, acl.Permissions{acl.AccessAll, acl.AccessLibrary}) {
-			sharedAlbums := "photos.photo_uid IN (SELECT photo_uid FROM photos_albums WHERE hidden = 0 AND missing = 0 AND album_uid IN (?)) OR "
-
-			if sess.IsVisitor() || sess.NotRegistered() {
-				s = s.Where(sharedAlbums+"photos.published_at > ?", sess.SharedUIDs(), entity.TimeStamp())
-			} else if basePath := user.GetBasePath(); basePath == "" {
-				s = s.Where(sharedAlbums+"photos.created_by = ? OR photos.published_at > ?", sess.SharedUIDs(), user.UserUID, entity.TimeStamp())
-			} else {
-				s = s.Where(sharedAlbums+"photos.created_by = ? OR photos.published_at > ? OR photos.photo_path = ? OR photos.photo_path LIKE ?",
-					sess.SharedUIDs(), user.UserUID, entity.TimeStamp(), basePath, basePath+"/%")
-			}
-		}
+	e = handleSessionAndPermissions(s, sess, f)
+	if e != nil {
+		return PhotoResults{}, 0, e
 	}
 
 	// Set sort order.
-	switch f.Order {
-	case sortby.Edited:
-		s = s.Where("photos.edited_at IS NOT NULL").Order("photos.edited_at DESC, files.media_id")
-	case sortby.Relevance:
-		if f.Label != "" {
-			s = s.Order("photos.photo_quality DESC, photos_labels.uncertainty ASC, files.time_index")
-		} else {
-			s = s.Order("photos.photo_quality DESC, files.time_index")
-		}
-	case sortby.Duration:
-		s = s.Order("photos.photo_duration DESC, files.time_index")
-	case sortby.Size:
-		s = s.Order("files.file_size DESC, files.time_index")
-	case sortby.Newest:
-		s = s.Order("files.time_index")
-	case sortby.Oldest:
-		s = s.Order("files.photo_taken_at, files.media_id")
-	case sortby.Similar:
-		s = s.Where("files.file_diff > 0")
-		s = s.Order("photos.photo_color, photos.cell_id, files.file_diff, files.photo_id, files.time_index")
-	case sortby.Name:
-		s = s.Order("photos.photo_path, photos.photo_name, files.time_index")
-	case sortby.Random:
-		s = s.Order(sortby.RandomExpr(s.Dialect()))
-	case sortby.Default, sortby.Imported, sortby.Added:
-		s = s.Order("files.media_id")
-	default:
-		return PhotoResults{}, 0, ErrBadSortOrder
+	e = handleOrder(s, f)
+	if e != nil {
+		return PhotoResults{}, 0, e
 	}
 
 	// Exclude files with errors by default.
-	if !f.Hidden {
-		if f.Error {
-			s = s.Where("files.file_error <> ''")
-		} else {
-			s = s.Where("files.file_error = ''")
-		}
-	}
+	handleExcludeErrorFiles(s, f)
 
 	// Find primary files only?
-	if f.Primary {
-		s = s.Where("files.file_primary = 1")
-	} else if f.Order == sortby.Similar {
-		s = s.Where("files.file_primary = 1 OR files.media_type = ?", media.Video)
-	} else if f.Order == sortby.Random {
-		s = s.Where("files.file_primary = 1 AND photos.photo_type NOT IN ('live','video') OR photos.photo_type IN ('live','video') AND files.media_type IN ('live','video')")
-	} else {
-		// Otherwise, find all matching media except sidecar files.
-		s = s.Where("files.file_sidecar = 0")
-	}
+	handlePrimaryFiles(s, f)
 
 	// Find specific UIDs only.
 	if txt.NotEmpty(f.UID) {
