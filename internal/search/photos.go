@@ -46,15 +46,12 @@ func PhotoIds(f form.SearchPhotos) (files PhotoResults, count int, err error) {
 	f.Primary = true
 	return searchPhotos(f, nil, "photos.id, photos.photo_uid, files.file_uid")
 }
-
-// searchPhotos finds photos based on the search form and user session then returns them as PhotoResults.
-func searchPhotos(f form.SearchPhotos, sess *entity.Session, resultCols string) (results PhotoResults, count int, err error) {
-	start := time.Now()
+func buildBasicFilters(f form.SearchPhotos, sess *entity.Session, resultCols string) (db *gorm.DB, returnZeroResultsImmediately bool, err error) {
 
 	// Parse query string and filter.
 	if err = f.ParseQueryString(); err != nil {
 		log.Debugf("search: %s", err)
-		return PhotoResults{}, 0, ErrBadRequest
+		return nil, false, ErrBadRequest
 	}
 
 	// Find photos near another?
@@ -64,7 +61,7 @@ func searchPhotos(f form.SearchPhotos, sess *entity.Session, resultCols string) 
 		// Find a nearby picture using the UID or return an empty result otherwise.
 		if err = Db().First(&photo, "photo_uid = ?", f.Near).Error; err != nil {
 			log.Debugf("search: %s (find nearby)", err)
-			return PhotoResults{}, 0, ErrNotFound
+			return nil, false, ErrNotFound
 		}
 
 		// Set the S2 Cell ID to search for.
@@ -99,15 +96,15 @@ func searchPhotos(f form.SearchPhotos, sess *entity.Session, resultCols string) 
 		f.Scope = strings.ToLower(f.Scope)
 
 		if idType, idPrefix := rnd.IdType(f.Scope); idType != rnd.TypeUID || idPrefix != entity.AlbumUID {
-			return PhotoResults{}, 0, ErrInvalidId
+			return nil, false, ErrInvalidId
 		} else if a, err := entity.CachedAlbumByUID(f.Scope); err != nil || a.AlbumUID == "" {
-			return PhotoResults{}, 0, ErrInvalidId
+			return nil, false, ErrInvalidId
 		} else if a.AlbumFilter == "" {
 			s = s.Joins("JOIN photos_albums ON photos_albums.photo_uid = files.photo_uid").
 				Where("photos_albums.hidden = 0 AND photos_albums.album_uid = ?", a.AlbumUID)
 		} else if formErr := form.Unserialize(&f, a.AlbumFilter); formErr != nil {
 			log.Debugf("search: %s (%s)", clean.Error(formErr), clean.Log(a.AlbumFilter))
-			return PhotoResults{}, 0, ErrBadFilter
+			return nil, false, ErrBadFilter
 		} else {
 			f.Filter = a.AlbumFilter
 			s = s.Where("files.photo_uid NOT IN (SELECT photo_uid FROM photos_albums pa WHERE pa.hidden = 1 AND pa.album_uid = ?)", a.AlbumUID)
@@ -149,7 +146,7 @@ func searchPhotos(f form.SearchPhotos, sess *entity.Session, resultCols string) 
 		if f.Scope != "" && !sess.HasShare(f.Scope) && (sess.User().HasSharedAccessOnly(acl.ResourcePhotos) || sess.NotRegistered()) ||
 			f.Scope == "" && acl.Resources.Deny(acl.ResourcePhotos, aclRole, acl.ActionSearch) {
 			event.AuditErr([]string{sess.IP(), "session %s", "%s %s as %s", "denied"}, sess.RefID, acl.ActionSearch.String(), string(acl.ResourcePhotos), aclRole)
-			return PhotoResults{}, 0, ErrForbidden
+			return nil, false, ErrForbidden
 		}
 
 		// Limit results for external users.
@@ -195,7 +192,7 @@ func searchPhotos(f form.SearchPhotos, sess *entity.Session, resultCols string) 
 	case sortby.Default, sortby.Imported, sortby.Added:
 		s = s.Order("files.media_id")
 	default:
-		return PhotoResults{}, 0, ErrBadSortOrder
+		return nil, false, ErrBadSortOrder
 	}
 
 	// Exclude files with errors by default.
@@ -226,7 +223,7 @@ func searchPhotos(f form.SearchPhotos, sess *entity.Session, resultCols string) 
 		idType, prefix := rnd.ContainsType(ids)
 
 		if idType == rnd.TypeUnknown {
-			return PhotoResults{}, 0, fmt.Errorf("%s ids specified", idType)
+			return nil, false, fmt.Errorf("%s ids specified", idType)
 		} else if idType.SHA() {
 			s = s.Where("files.file_hash IN (?)", ids)
 		} else if idType == rnd.TypeUID {
@@ -236,23 +233,13 @@ func searchPhotos(f form.SearchPhotos, sess *entity.Session, resultCols string) 
 			case entity.FileUID:
 				s = s.Where("files.file_uid IN (?)", ids)
 			default:
-				return PhotoResults{}, 0, fmt.Errorf("invalid ids specified")
+				return nil, false, fmt.Errorf("invalid ids specified")
 			}
 		}
 
 		// Find UIDs only to improve performance.
 		if sess == nil && f.FindUidOnly() {
-			if result := s.Scan(&results); result.Error != nil {
-				return results, 0, result.Error
-			}
-
-			log.Debugf("photos: found %s for %s [%s]", english.Plural(len(results), "result", "results"), f.SerializeAll(), time.Since(start))
-
-			if f.Merged {
-				return results.Merge()
-			}
-
-			return results, len(results), nil
+			return s, false, nil
 		}
 	}
 
@@ -272,7 +259,7 @@ func searchPhotos(f form.SearchPhotos, sess *entity.Session, resultCols string) 
 	if txt.NotEmpty(f.Label) {
 		if labelErr := Db().Where(AnySlug("label_slug", f.Label, txt.Or)).Or(AnySlug("custom_slug", f.Label, txt.Or)).Find(&labels).Error; len(labels) == 0 || labelErr != nil {
 			log.Debugf("search: label %s not found", txt.LogParamLower(f.Label))
-			return PhotoResults{}, 0, nil
+			return s, true, nil
 		} else {
 			for _, l := range labels {
 				labelIds = append(labelIds, l.ID)
@@ -732,7 +719,25 @@ func searchPhotos(f form.SearchPhotos, sess *entity.Session, resultCols string) 
 		}
 	}
 
+	return s, false, nil
+}
+
+// searchPhotos finds photos based on the search form and user session then returns them as PhotoResults.
+func searchPhotos(f form.SearchPhotos, sess *entity.Session, resultCols string) (results PhotoResults, count int, err error) {
+	start := time.Now()
+
+	s, returnZeroResultsImmediately, err := buildBasicFilters(f, sess, resultCols)
+
+	if err != nil {
+		return PhotoResults{}, 0, err
+	}
+
+	if returnZeroResultsImmediately {
+		return PhotoResults{}, 0, nil
+	}
+
 	// Limit offset and count.
+	// Todo: Raynor @ Jan. 27th, 2024 the UID only related logic do not use Count and Offset criteria.
 	if f.Count > 0 && f.Count <= MaxResults {
 		s = s.Limit(f.Count).Offset(f.Offset)
 	} else {
