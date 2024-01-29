@@ -178,3 +178,7 @@ func (photos PhotoResults) Merge() (merged PhotoResults, count int, err error) {
 
 	return merged, count, nil
 }
+
+type PhotoCountResult struct {
+	TotalCount uint `json:"TotalCount"`
+}

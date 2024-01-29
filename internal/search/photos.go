@@ -40,13 +40,17 @@ func UserPhotos(f form.SearchPhotos, sess *entity.Session) (results PhotoResults
 	return searchPhotos(f, sess, PhotosColsAll)
 }
 
+func UserPhotosCount(f form.SearchPhotos, sess *entity.Session) (count PhotoCountResult, err error) {
+	return getPhotosTotalCount(f, sess, PhotosColsAll)
+}
+
 // PhotoIds finds photo and file ids based on the search form provided and returns them as PhotoResults.
 func PhotoIds(f form.SearchPhotos) (files PhotoResults, count int, err error) {
 	f.Merged = false
 	f.Primary = true
 	return searchPhotos(f, nil, "photos.id, photos.photo_uid, files.file_uid")
 }
-func buildBasicFilters(f form.SearchPhotos, sess *entity.Session, resultCols string) (db *gorm.DB, returnZeroResultsImmediately bool, err error) {
+func buildBasicQuery(f form.SearchPhotos, sess *entity.Session, resultCols string) (db *gorm.DB, returnZeroResultsImmediately bool, err error) {
 
 	// Parse query string and filter.
 	if err = f.ParseQueryString(); err != nil {
@@ -722,11 +726,24 @@ func buildBasicFilters(f form.SearchPhotos, sess *entity.Session, resultCols str
 	return s, false, nil
 }
 
+// Given the search form, and return the total count (discard f.Merged, f.Count and f.Offset)
+func getPhotosTotalCount(f form.SearchPhotos, sess *entity.Session, resultCols string) (count PhotoCountResult, err error) {
+	s, returnZeroResultsImmediately, err := buildBasicQuery(f, sess, resultCols)
+	var countResult PhotoCountResult
+
+	if returnZeroResultsImmediately {
+		countResult.TotalCount = 0
+		return countResult, nil
+	}
+	s.Count(&countResult.TotalCount)
+	return countResult, nil
+}
+
 // searchPhotos finds photos based on the search form and user session then returns them as PhotoResults.
 func searchPhotos(f form.SearchPhotos, sess *entity.Session, resultCols string) (results PhotoResults, count int, err error) {
 	start := time.Now()
 
-	s, returnZeroResultsImmediately, err := buildBasicFilters(f, sess, resultCols)
+	s, returnZeroResultsImmediately, err := buildBasicQuery(f, sess, resultCols)
 
 	if err != nil {
 		return PhotoResults{}, 0, err

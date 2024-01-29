@@ -111,7 +111,20 @@ func SearchPhotos(router *gin.RouterGroup) {
 		c.JSON(http.StatusOK, result)
 	}
 
+	countHandler := func(c *gin.Context) {
+		f, s, err := searchForm(c)
+		if err != nil {
+			return
+		}
+
+		photoTotalCount, err := search.UserPhotosCount(f, s)
+
+		c.JSON(http.StatusOK, photoTotalCount)
+
+	}
+
 	// Register route handlers.
 	router.GET("/photos", defaultHandler)
+	router.GET("/photos/count", countHandler)
 	router.GET("/photos/view", viewHandler)
 }
