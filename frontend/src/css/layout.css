@@ -245,3 +245,7 @@ footer {
 #photoprism .p-about-footer .body-1 {
     line-height: 1.8em;
 }
+
+.p-photo-timeline{
+    height: 100%;
+}

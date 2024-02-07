@@ -35,6 +35,11 @@
                @click.stop="setView('mosaic')">
           <v-icon>view_comfy</v-icon>
         </v-btn>
+
+        <v-btn v-else-if="settings.view === 'mosaic'" icon :title="$gettext('Toggle View')"
+               @click.stop="setView('timeline')">
+          <v-icon>view_comfy</v-icon>
+        </v-btn>
         <v-btn v-else icon :title="$gettext('Toggle View')" @click.stop="setView('cards')">
           <v-icon>view_column</v-icon>
         </v-btn>

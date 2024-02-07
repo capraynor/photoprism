@@ -191,6 +191,14 @@ export class Rest extends Model {
     return 10000;
   }
 
+  static async totalCount(params) {
+    const options = {
+      params: params,
+    };
+    var totalCountResp = await Api.get(`${this.getCollectionResource()}/count`, options);
+    return totalCountResp.data;
+  }
+
   static search(params) {
     const options = {
       params: params,

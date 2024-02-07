@@ -31,6 +31,7 @@ import PPhotoViewer from "component/photo-viewer.vue";
 import PVideoPlayer from "component/video/player.vue";
 import PPhotoToolbar from "component/photo/toolbar.vue";
 import PPhotoCards from "component/photo/cards.vue";
+import PPhotoTimeline from "component/photo/timeline.vue";
 import PPhotoMosaic from "component/photo/mosaic.vue";
 import PPhotoList from "component/photo/list.vue";
 import PPhotoPreview from "component/photo/preview.vue";
@@ -57,6 +58,7 @@ components.install = (Vue) => {
   Vue.component("PVideoPlayer", PVideoPlayer);
   Vue.component("PPhotoViewer", PPhotoViewer);
   Vue.component("PPhotoToolbar", PPhotoToolbar);
+  Vue.component("PPhotoTimeline", PPhotoTimeline);
   Vue.component("PPhotoCards", PPhotoCards);
   Vue.component("PPhotoMosaic", PPhotoMosaic);
   Vue.component("PPhotoList", PPhotoList);

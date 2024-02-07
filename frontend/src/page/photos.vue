@@ -40,6 +40,17 @@
                     :edit-photo="editPhoto"
                     :open-location="openLocation"
                     :is-shared-view="isShared"></p-photo-list>
+      <p-photo-timeline v-else-if="settings.view === 'timeline'"
+                     :context="context"
+                     :photos="results"
+                     :select-mode="selectMode"
+                     :filter="filter"
+                     :total-count="totalCount"
+                     :open-photo="openPhoto"
+                     :edit-photo="editPhoto"
+                     :open-location="openLocation"
+                     :ensure-photo-loaded="ensurePhotoLoaded"
+                     :is-shared-view="isShared"></p-photo-timeline>
       <p-photo-cards v-else
                      :context="context"
                      :photos="results"
@@ -128,6 +139,7 @@ export default {
       dirty: false,
       complete: false,
       results: [],
+      totalCount: undefined,
       scrollDisabled: true,
       scrollDistance: window.innerHeight * 6,
       batchSize: batchSize,
@@ -223,7 +235,13 @@ export default {
     }
   },
   created() {
-    this.search();
+    if (this.settings.view == "timeline"){
+      this.disableScroll = true;
+      this.loading = false;
+    }else{
+      this.disableScroll = false;
+      this.search();
+    }
 
     this.subscriptions.push(Event.subscribe("import.completed", (ev, data) => this.onImportCompleted(ev, data)));
     this.subscriptions.push(Event.subscribe("photos", (ev, data) => this.onUpdate(ev, data)));
@@ -245,6 +263,10 @@ export default {
     }
   },
   methods: {
+    async loadTotalCount(params){
+        var totalCountResp = await Photo.totalCount(params);
+        this.totalCount = totalCountResp.TotalCount;
+    },
     searchCount() {
       const offset = parseInt(window.localStorage.getItem("photos_offset"));
       if(this.offset > 0 || !offset) {
@@ -363,6 +385,33 @@ export default {
 
       return true;
     },
+    async ensurePhotoLoaded(start, end){
+      this.loading = false;
+      const count = end - start + 1;
+      const params = {
+          ...this.lastFilter,
+          ...this.staticFilter,
+          count: count,
+          offset: start,
+          merged: false,
+        };
+      if (typeof this.totalCount === "undefined"){
+        await this.loadTotalCount(params);
+        for(let i = 0; i < this.totalCount; i++){
+          this.results[i] = undefined;
+        }
+      }
+
+      const existingData = this.results.slice(start, end-start);
+      const shouldLoadPhotoFromServer = existingData.some(x => !x);
+
+      if (shouldLoadPhotoFromServer) {
+        var response = await Photo.search(params);
+        this.results.splice(start, count, ...response.models);
+        console.log(response);
+      }
+      this.loading = false;
+    },
     loadMore() {
       if (this.scrollDisabled || this.$scrollbar.disabled()) return;
 
@@ -387,7 +436,6 @@ export default {
       if (this.staticFilter) {
         Object.assign(params, this.staticFilter);
       }
-
       Photo.search(params).then(response => {
         this.results = this.dirty ? response.models : Photo.mergeResponse(this.results, response);
         this.complete = (response.count < response.limit);
@@ -504,13 +552,18 @@ export default {
 
       if (this.loading) return;
 
-      this.loading = true;
-      this.page = 0;
-      this.dirty = true;
-      this.complete = false;
-      this.scrollDisabled = false;
+      if (this.settings.view === 'timeline') {
+        this.scrollDisabled = true;
+        this.complete = true;
+      } else {
+        this.loading = true;
+        this.page = 0;
+        this.dirty = true;
+        this.complete = false;
+        this.scrollDisabled = false;
 
-      this.loadMore();
+        this.loadMore();
+      }
     },
     search() {
       /**

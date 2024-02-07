@@ -735,6 +735,11 @@ func getPhotosTotalCount(f form.SearchPhotos, sess *entity.Session, resultCols s
 		countResult.TotalCount = 0
 		return countResult, nil
 	}
+
+	if f.Merged {
+		// Return merged files.
+		s = s.Group("photos.id")
+	}
 	s.Count(&countResult.TotalCount)
 	return countResult, nil
 }
