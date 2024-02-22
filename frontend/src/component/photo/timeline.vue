@@ -25,32 +25,32 @@
           </p>
         </v-alert>
       </div>
-      <h1>Timeline</h1>
       <v-layout row wrap class="search-results photo-results mosaic-view timeline-view" :class="{'select-results': selectMode}">
         
 
         <div
             v-for="(photo, index) in photos"
+            v-if="photo && isPhotoVisible(index)"
             ref="items"
-            :key="photo.ID"
-            class="flex xs4 sm3 md2 lg1"
+            :key="index"
             :data-index="index"
+            :style="getPhotoStyle(index)"
         >
          <!--
            The following div is the layout + size container. It makes the browser not
            re-layout all elements in the list when the children of one of them changes
           -->
           <div class="image-container">
-            <div v-if="index < firstVisibleElementIndex || index > lastVisibileElementIndex"
+            <!-- <div v-if="index < firstVisibleElementIndex || index > lastVisibileElementIndex"
                  :data-uid="photo.UID"
                  class="card darken-1 result image"
-            ></div>
-            <div  v-else
+            ></div> -->
+            <div  
                   :key="photo.Hash"
                   tile
                   :data-id="photo.ID"
                   :data-uid="photo.UID"
-                  :style="`background-image: url(${photo.thumbnailUrl('tile_224')})`"
+                  :style="`background-image: url(${photo.thumbnailUrl('tile_224')});`"
                   :class="photo.classes().join(' ') + ' card darken-1 result clickable image'"
                   :alt="photo.Title"
                   :title="photo.Title"
@@ -174,7 +174,7 @@
       },
       photosPerLine: {
         type: Number,
-        default: 5
+        default: 10
       },
       ensurePhotoLoaded: {
         type: Function,
@@ -198,46 +198,46 @@
       };
     },
     watch: {
-      photos: {
-        handler() {
-          this.$nextTick(() => {
-            this.observeItems();
-          });
-        },
-        immediate: true,
-      },
+      // photos: {
+      //   handler() {
+      //     this.$nextTick(() => {
+      //       this.observeItems();
+      //     });
+      //   },
+      //   immediate: true,
+      // }
     },
     computed: {
       lineCount() {
-        return Math.ceil(this.totalCount / this.photosPerLine);
-      },
+          return Math.ceil(this.totalCount / this.photosPerLine);
+        },
       lineHeight() {
-        return Math.floor(this.width / this.photosPerLine);
-      },
+          return Math.floor(this.width / this.photosPerLine);
+        },
       height() {
-        console.log(this);
-        const result = this.lineCount * this.lineHeight;
-        console.log(`total height: ${result}`);
-        return result;
-      },
-      photoVisibleArea() {
-        debugger;
-        let scrollTop = Math.min(0, this.scrollTop);
-        let visibleLines = window.innerHeight / this.lineHeight;
-        let startLineCount = Math.floor(scrollTop / this.lineHeight);
-        let endLineCount = startLineCount + visibleLines;
+          const result = this.lineCount * this.lineHeight;
+          return result;
+        },
+      photoVisibleArea (){
+          let scrollTop = Math.max(0, this.scrollTop);
+          let visibleLines = Math.ceil(window.innerHeight / this.lineHeight);
+          let startLineCount = Math.floor(scrollTop / this.lineHeight);
+          let endLineCount = startLineCount + visibleLines;
 
-        let bufferLines = 4;
-        startLineCount = Math.min(0, startLineCount - bufferLines);
-        endLineCount = endLineCount + bufferLines;
-        let startPhotoCount = startLineCount * this.photosPerLine;
-        let endPhotoCount = endLineCount * this.photosPerLine - 1;
-        return {
-          startLineCount,
-          endLineCount,
-          startPhotoCount,
-          endPhotoCount
-        }
+          let bufferLines = 1;
+          startLineCount = Math.max(0, startLineCount - bufferLines);
+          endLineCount = endLineCount + bufferLines;
+          let startPhotoCount = startLineCount * this.photosPerLine;
+          let endPhotoCount = endLineCount * this.photosPerLine - 1;
+          return {
+            startLineCount,
+            endLineCount,
+            startPhotoCount,
+            endPhotoCount
+          }
+        },
+      toolbarHeight() {
+        return document.querySelector(".p-photo-toolbar").scrollHeight;
       }
     },
     beforeCreate() {
@@ -247,15 +247,13 @@
         rootMargin: "50% 0px",
       });
     },
+
     mounted(){
       this.bindResizeEvent();
       const rect = this.$refs.container.getBoundingClientRect();
-      this.onContainerResize(rect.width, rect.height)
-      (async () => {
-        window.addEventListener("scroll", this.onScroll);
-        const photoVisibleArea = this.photoVisibleArea;
-        await this.ensurePhotoLoaded(photoVisibleArea.startPhotoCount, photoVisibleArea.endPhotoCount);
-      })()
+      this.width = rect.width;
+      window.addEventListener("scroll", this.onScroll);
+      this.updateDisplayPhotos();
     },
     created() {
 
@@ -266,19 +264,41 @@
       this.unbindResizeEvent();
     },
     methods: {
-      async onScrollDebounced(e){
-        console.log(this);
-        console.log(e);
-        var scrollTop = window.scrollY;
-        var toolbarHeight = document.querySelector(".p-photo-toolbar").scrollHeight;
-        this.scrollTop = scrollTop - toolbarHeight;
-
+      async updateDisplayPhotos (){
+        const photoVisibleArea = this.photoVisibleArea;
+        console.log(photoVisibleArea);
+        await this.ensurePhotoLoaded(photoVisibleArea.startPhotoCount, photoVisibleArea.endPhotoCount);
+        console.log(this.photos);
       },
-      async onScroll (e) {
+
+      isPhotoVisible(i){
+        return (i >= this.photoVisibleArea.startPhotoCount && i <= this.photoVisibleArea.endPhotoCount);
+      },
+
+      getPhotoStyle(i){
+        const result = {
+          position: "absolute",
+          width: `${this.lineHeight}px`,
+          height: `${this.lineHeight}px`,
+          left: `${(i % this.photosPerLine) * this.lineHeight}px`,
+          top: `${(parseInt(i / this.photosPerLine)) * this.lineHeight + this.toolbarHeight}px`
+        };
+
+        return result;
+      },
+      async onScrollDebounced(e){
+        var scrollTop = window.scrollY;
+        var toolbarHeight = this.toolbarHeight;
+        
+        this.scrollTop = scrollTop - toolbarHeight;
+        console.log(this);
+        await this.updateDisplayPhotos();
+      },
+      onScroll (e) {
         clearTimeout(this._onscrollTimeout);
         this._onscrollTimeout = setTimeout(() => {this.onScrollDebounced(e)}, 50)
       },
-      async onContainerResize(width, height){
+      onContainerResize(width, height){
         this.width = width;
       },
       bindResizeEvent(){
@@ -301,22 +321,22 @@
         this.resizeObserver.unobserve(this.$refs.container);
       },
 
-      observeItems() {
-        if (this.$refs.items === undefined) {
-          return;
-        }
+      // observeItems() {
+      //   if (this.$refs.items === undefined) {
+      //     return;
+      //   }
   
-        /**
-         * observing only every 5th item reduces the amount of time
-         * spent computing intersection by 80%. me might render up to
-         * 8 items more than required, but the time saved computing
-         * intersections is far greater than the time lost rendering
-         * a couple more items
-         */
-        for (let i = 0; i < this.$refs.items.length; i += 5) {
-          this.intersectionObserver.observe(this.$refs.items[i]);
-        }
-      },
+      //   /**
+      //    * observing only every 5th item reduces the amount of time
+      //    * spent computing intersection by 80%. me might render up to
+      //    * 8 items more than required, but the time saved computing
+      //    * intersections is far greater than the time lost rendering
+      //    * a couple more items
+      //    */
+      //   for (let i = 0; i < this.$refs.items.length; i += 5) {
+      //     this.intersectionObserver.observe(this.$refs.items[i]);
+      //   }
+      // },
       elementIndexFromIntersectionObserverEntry(entry) {
         return parseInt(entry.target.getAttribute('data-index'));
       },

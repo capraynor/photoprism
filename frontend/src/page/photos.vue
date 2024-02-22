@@ -386,6 +386,7 @@ export default {
       return true;
     },
     async ensurePhotoLoaded(start, end){
+      console.log(`Ensure ${start}, ${end}`)
       this.loading = false;
       const count = end - start + 1;
       const params = {
@@ -402,13 +403,12 @@ export default {
         }
       }
 
-      const existingData = this.results.slice(start, end-start);
+      const existingData = this.results.slice(start, end);
       const shouldLoadPhotoFromServer = existingData.some(x => !x);
 
       if (shouldLoadPhotoFromServer) {
         var response = await Photo.search(params);
         this.results.splice(start, count, ...response.models);
-        console.log(response);
       }
       this.loading = false;
     },
