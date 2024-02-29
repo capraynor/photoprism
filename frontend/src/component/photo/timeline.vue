@@ -241,11 +241,11 @@
       }
     },
     beforeCreate() {
-      this.intersectionObserver = new IntersectionObserver((entries) => {
-        this.visibilitiesChanged(entries);
-      }, {
-        rootMargin: "50% 0px",
-      });
+      // this.intersectionObserver = new IntersectionObserver((entries) => {
+      //   this.visibilitiesChanged(entries);
+      // }, {
+      //   rootMargin: "50% 0px",
+      // });
     },
 
     mounted(){
@@ -260,15 +260,13 @@
     },
     beforeDestroy() {
       window.removeEventListener("scroll", this.onScroll)
-      this.intersectionObserver.disconnect();
+      // this.intersectionObserver.disconnect();
       this.unbindResizeEvent();
     },
     methods: {
       async updateDisplayPhotos (){
         const photoVisibleArea = this.photoVisibleArea;
-        console.log(photoVisibleArea);
         await this.ensurePhotoLoaded(photoVisibleArea.startPhotoCount, photoVisibleArea.endPhotoCount);
-        console.log(this.photos);
       },
 
       isPhotoVisible(i){
@@ -337,21 +335,21 @@
       //     this.intersectionObserver.observe(this.$refs.items[i]);
       //   }
       // },
-      elementIndexFromIntersectionObserverEntry(entry) {
-        return parseInt(entry.target.getAttribute('data-index'));
-      },
-      visibilitiesChanged(entries) {
-        const [smallestIndex, largestIndex] = virtualizationTools.updateVisibleElementIndices(
-          this.visibleElementIndices,
-          entries,
-          this.elementIndexFromIntersectionObserverEntry,
-        );
+      // elementIndexFromIntersectionObserverEntry(entry) {
+      //   return parseInt(entry.target.getAttribute('data-index'));
+      // },
+      // visibilitiesChanged(entries) {
+      //   const [smallestIndex, largestIndex] = virtualizationTools.updateVisibleElementIndices(
+      //     this.visibleElementIndices,
+      //     entries,
+      //     this.elementIndexFromIntersectionObserverEntry,
+      //   );
   
-        // we observe only every 5th item, so we increase the rendered
-        // range here by 4 items in every directio just to be safe
-        this.firstVisibleElementIndex = smallestIndex - 4;
-        this.lastVisibileElementIndex = largestIndex + 4;
-      },
+      //   // we observe only every 5th item, so we increase the rendered
+      //   // range here by 4 items in every directio just to be safe
+      //   this.firstVisibleElementIndex = smallestIndex - 4;
+      //   this.lastVisibileElementIndex = largestIndex + 4;
+      // },
       livePlayer(photo) {
         return document.querySelector("#live-player-" + photo.ID);
       },

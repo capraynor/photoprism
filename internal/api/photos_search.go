@@ -123,8 +123,19 @@ func SearchPhotos(router *gin.RouterGroup) {
 
 	}
 
+	photoIdsHandler := func(c *gin.Context) {
+		f, s, err := searchForm(c)
+		if err != nil {
+			return
+		}
+
+		photoIdsResult, err := search.UserPhotoIds(f, s)
+		c.JSON(http.StatusOK, photoIdsResult)
+	}
+
 	// Register route handlers.
 	router.GET("/photos", defaultHandler)
 	router.GET("/photos/count", countHandler)
 	router.GET("/photos/view", viewHandler)
+	router.GET("/photos/ids", photoIdsHandler)
 }

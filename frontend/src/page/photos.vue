@@ -139,7 +139,7 @@ export default {
       dirty: false,
       complete: false,
       results: [],
-      totalCount: undefined,
+      ids: undefined,
       scrollDisabled: true,
       scrollDistance: window.innerHeight * 6,
       batchSize: batchSize,
@@ -164,6 +164,12 @@ export default {
     };
   },
   computed: {
+    totalCount: function(){
+      if (!this.ids){
+        return undefined;
+      }
+      return this.ids.length;
+    },
     selectMode: function () {
       return this.selection.length > 0;
     },
@@ -263,9 +269,17 @@ export default {
     }
   },
   methods: {
-    async loadTotalCount(params){
-        var totalCountResp = await Photo.totalCount(params);
-        this.totalCount = totalCountResp.TotalCount;
+    // async loadTotalCount(params){
+    //     var totalCountResp = await Photo.totalCount(params);
+    //     //params.merged = true;
+    //     var ids = await Photo.ids(params);
+    //     this.totalCount = totalCountResp.TotalCount;
+    //     debugger;
+    //     console.log(ids);
+    // },
+    async loadAllIds(params){
+      var ids = await Photo.ids(params);
+      this.ids = ids;
     },
     searchCount() {
       const offset = parseInt(window.localStorage.getItem("photos_offset"));
@@ -386,7 +400,6 @@ export default {
       return true;
     },
     async ensurePhotoLoaded(start, end){
-      console.log(`Ensure ${start}, ${end}`)
       this.loading = false;
       const count = end - start + 1;
       const params = {
@@ -394,19 +407,21 @@ export default {
           ...this.staticFilter,
           count: count,
           offset: start,
-          merged: false,
+          merged: true,
         };
-      if (typeof this.totalCount === "undefined"){
-        await this.loadTotalCount(params);
+      if (typeof this.ids === "undefined"){
+        // await this.loadTotalCount(params);
+        await this.loadAllIds(params);
         for(let i = 0; i < this.totalCount; i++){
           this.results[i] = undefined;
         }
       }
-
       const existingData = this.results.slice(start, end);
       const shouldLoadPhotoFromServer = existingData.some(x => !x);
-
+      var loadIds = this.ids.filter((v, i) => start <= i && i <= end);
+      console.log(loadIds);
       if (shouldLoadPhotoFromServer) {
+        params.uid = loadIds.map(x => x.UID).join("|");
         var response = await Photo.search(params);
         this.results.splice(start, count, ...response.models);
       }

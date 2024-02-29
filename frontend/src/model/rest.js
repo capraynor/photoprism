@@ -199,6 +199,16 @@ export class Rest extends Model {
     return totalCountResp.data;
   }
 
+  static async ids(params){
+    const options = {
+      params: params,
+    };
+
+    var idsResp = await Api.get(`${this.getCollectionResource()}/ids`, options); 
+
+    return idsResp.data;
+  }
+
   static search(params) {
     const options = {
       params: params,

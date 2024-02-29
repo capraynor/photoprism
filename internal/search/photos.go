@@ -44,6 +44,10 @@ func UserPhotosCount(f form.SearchPhotos, sess *entity.Session) (count PhotoCoun
 	return getPhotosTotalCount(f, sess, PhotosColsAll)
 }
 
+func UserPhotoIds(f form.SearchPhotos, sess *entity.Session) (results PhotoIDResults, err error) {
+	return getPhotoIds(f, sess)
+}
+
 // PhotoIds finds photo and file ids based on the search form provided and returns them as PhotoResults.
 func PhotoIds(f form.SearchPhotos) (files PhotoResults, count int, err error) {
 	f.Merged = false
@@ -726,7 +730,7 @@ func buildBasicQuery(f form.SearchPhotos, sess *entity.Session, resultCols strin
 	return s, false, nil
 }
 
-// Given the search form, and return the total count (discard f.Merged, f.Count and f.Offset)
+// Given the search form, and return the total count (discard f.Count and f.Offset)
 func getPhotosTotalCount(f form.SearchPhotos, sess *entity.Session, resultCols string) (count PhotoCountResult, err error) {
 	s, returnZeroResultsImmediately, err := buildBasicQuery(f, sess, resultCols)
 	var countResult PhotoCountResult
@@ -744,6 +748,30 @@ func getPhotosTotalCount(f form.SearchPhotos, sess *entity.Session, resultCols s
 	return countResult, nil
 }
 
+// Given the search form, and return all photo ids
+func getPhotoIds(f form.SearchPhotos, sess *entity.Session) (results PhotoIDResults, err error) {
+	s, returnZeroResultsImmediately, err := buildBasicQuery(f, sess, "photos.photo_uid")
+
+	if err != nil {
+		return PhotoIDResults{}, err
+	}
+
+	if returnZeroResultsImmediately {
+		return PhotoIDResults{}, nil
+	}
+
+	if f.Merged {
+		// Return merged files.
+		s = s.Group("photos.id")
+	}
+
+	// Query database.
+	if err = s.Scan(&results).Error; err != nil {
+		return results, err
+	}
+	return results, nil
+}
+
 // searchPhotos finds photos based on the search form and user session then returns them as PhotoResults.
 func searchPhotos(f form.SearchPhotos, sess *entity.Session, resultCols string) (results PhotoResults, count int, err error) {
 	start := time.Now()
@@ -759,11 +787,12 @@ func searchPhotos(f form.SearchPhotos, sess *entity.Session, resultCols string) 
 	}
 
 	// Limit offset and count.
-	// Todo: Raynor @ Jan. 27th, 2024 the UID only related logic do not use Count and Offset criteria.
-	if f.Count > 0 && f.Count <= MaxResults {
-		s = s.Limit(f.Count).Offset(f.Offset)
-	} else {
-		s = s.Limit(MaxResults).Offset(f.Offset)
+	if txt.Empty(f.UID) {
+		if f.Count > 0 && f.Count <= MaxResults {
+			s = s.Limit(f.Count).Offset(f.Offset)
+		} else {
+			s = s.Limit(MaxResults).Offset(f.Offset)
+		}
 	}
 
 	// Query database.
