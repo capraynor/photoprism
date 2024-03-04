@@ -409,6 +409,7 @@
         this.openPhoto(index, showMerged, preferVideo);
       },
       onClick(ev, index) {
+
         const inputType = this.input.eval(ev, index);
         const longClick = inputType === ClickLong;
   

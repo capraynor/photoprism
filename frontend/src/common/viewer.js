@@ -254,6 +254,11 @@ class Viewer {
     const params = ctx.searchParams();
     params.count = params.offset + ctx.viewer.batchSize;
     params.offset = 0;
+    if (params.count < index){
+      //Raynor Chen @ Mar. 4th, 2024, 
+      // Currently this logic only for timeline, since timeline do not use offset. 
+      params.count = index + ctx.viewer.batchSize
+    }
 
     // Fetch viewer results from API.
     return Api.get("photos/view", { params })

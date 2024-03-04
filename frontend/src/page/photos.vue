@@ -402,8 +402,9 @@ export default {
     async ensurePhotoLoaded(start, end){
       this.loading = false;
       const count = end - start + 1;
+      const defaultParams = this.searchParams();
       const params = {
-          ...this.lastFilter,
+          ...this.filter,
           ...this.staticFilter,
           count: count,
           offset: start,
@@ -426,6 +427,7 @@ export default {
         this.results.splice(start, count, ...response.models);
       }
       this.loading = false;
+      this.listen = true;
     },
     loadMore() {
       if (this.scrollDisabled || this.$scrollbar.disabled()) return;
