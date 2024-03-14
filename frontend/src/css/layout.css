@@ -249,3 +249,69 @@ footer {
 .p-photo-timeline{
     height: 100%;
 }
+
+.time-wheel{
+    position: fixed;
+    right: 0;
+    bottom: 64px;
+    z-index: 9;
+    background: red;
+    user-select: none;
+    display: flex;
+    flex-direction: column;
+    height: calc(100% - 128px);
+    justify-content: center;
+}
+
+.time-wheel__timeline{
+    height: 100%;
+}
+
+.time-wheel__hover-indicator{
+    height: 3px;
+
+    position: absolute;
+    top: 0;
+    left: 0;
+
+    width: 100%;
+    border: 2px solid grey;
+}
+
+.time-wheel__scroll-indicator{
+    position: absolute;
+    top: 20px;
+    left: 0;
+    width: 100%;
+    border: 2px solid black;
+    box-sizing: border-box;
+}
+.time-wheel__photoPreviewPanel{
+    position: fixed;
+    display: flex;
+    width: 480px;
+    height: 480px;
+    top: 0;
+    right: 30px;
+    background: green;
+    flex-wrap: wrap;
+    transform: translate(0, -50%); 
+
+    /* -webkit-box-shadow: 0px 0px 30px 6px rgba(0,0,0,0.75);
+    -moz-box-shadow: 0px 0px 30px 6px rgba(0,0,0,0.75);
+    box-shadow: 0px 0px 30px 6px rgba(0,0,0,0.75); */
+    background-color: #1c1d1e;
+    border-radius: 10px;
+    padding: 30px;
+
+}
+
+.time-wheel__photoPreviewPanel__date {
+    background-color: #000000a3;
+}
+
+.time-wheel__photoPreviewPanel__photo{
+    width: 140px;
+    height: 140px;
+    background-size: cover;
+}

@@ -1,5 +1,5 @@
 <template>
-    <v-container ref="container" :style="{height: `${this.height}px`}" grid-list-xs fluid class="pa-2 p-photos p-photo-mosaic p-photo-timeline">
+    <div ref="container" :style="{height: `${this.height}px`}" grid-list-xs fluid class="p-photos p-photo-mosaic p-photo-timeline">
       <div v-if="totalCount === 0" class="pa-0">
         <v-alert
             :value="true"
@@ -131,20 +131,33 @@
           </div>
         </div>
       </v-layout>
-    </v-container>
+      <p-photo-time-wheel
+        :ids="ids"
+        :photos="photos"
+        :start-index="photoVisibleArea.startPhotoCount"
+        :end-index="photoVisibleArea.endPhotoCount"
+        :ensurePhotoLoaded="ensurePhotoLoaded"
+        :onPhotoClicked="onTimewheelPhotoClicked"
+      ></p-photo-time-wheel>
+    </div>
   </template>
   <script>
   import {Input, InputInvalid, ClickShort, ClickLong} from "common/input";
-  import {virtualizationTools} from 'common/virtualization-tools';
   import IconLivePhoto from "component/icon/live-photo.vue";
+  import PPhotoTimeWheel from "./photo-time-wheel.vue";
 
   export default {
     name: 'PPhotoTimeline',
     components: {
       IconLivePhoto,
+      PPhotoTimeWheel
     },
     props: {
       photos: {
+        type: Array,
+        default: () => [],
+      },
+      ids: {
         type: Array,
         default: () => [],
       },
@@ -294,7 +307,7 @@
       },
       onScroll (e) {
         clearTimeout(this._onscrollTimeout);
-        this._onscrollTimeout = setTimeout(() => {this.onScrollDebounced(e)}, 50)
+        this._onscrollTimeout = setTimeout(() => {this.onScrollDebounced(e)}, 10)
       },
       onContainerResize(width, height){
         this.width = width;
@@ -317,6 +330,9 @@
           return;
         }
         this.resizeObserver.unobserve(this.$refs.container);
+      },
+      onTimewheelPhotoClicked(){
+        alert('timewheel photo clicked')
       },
 
       // observeItems() {

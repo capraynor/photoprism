@@ -184,7 +184,17 @@ type PhotoCountResult struct {
 }
 
 type PhotoIDResult struct {
-	PhotoUID string `json:"UID" select:"photos.photo_uid"`
+	PhotoUID   string `json:"UID" select:"photos.photo_uid"`
+	PhotoYear  int    `json:"Year" select:"photos.photo_year"`
+	PhotoMonth int    `json:"Month" select:"photos.photo_month"`
 }
 
 type PhotoIDResults []PhotoIDResult
+
+type PhotoYearMonthCountResult struct {
+	PhotoYear  int   `json:"Year" select:"photos.photo_year"`
+	PhotoMonth int   `json:"Month" select:"photos.photo_month"`
+	PhotoCount int64 `json:"PhotoCount" select:"COUNT(*) AS photoCount"`
+}
+
+type PhotoYearMonthCountResults []PhotoYearMonthCountResult

@@ -205,7 +205,16 @@ export class Rest extends Model {
     };
 
     var idsResp = await Api.get(`${this.getCollectionResource()}/ids`, options); 
+    return idsResp.data;
+  }
 
+
+  static async yearMonthCount(params){
+    const options = {
+      params: params,
+    };
+
+    var idsResp = await Api.get(`${this.getCollectionResource()}/yearMonthCount`, options); 
     return idsResp.data;
   }
 

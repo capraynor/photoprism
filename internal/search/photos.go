@@ -742,7 +742,7 @@ func getPhotosTotalCount(f form.SearchPhotos, sess *entity.Session, resultCols s
 
 	if f.Merged {
 		// Return merged files.
-		s = s.Group("photos.id")
+		s = s.Group("photos.photo_uid")
 	}
 	s.Count(&countResult.TotalCount)
 	return countResult, nil
@@ -750,7 +750,7 @@ func getPhotosTotalCount(f form.SearchPhotos, sess *entity.Session, resultCols s
 
 // Given the search form, and return all photo ids
 func getPhotoIds(f form.SearchPhotos, sess *entity.Session) (results PhotoIDResults, err error) {
-	s, returnZeroResultsImmediately, err := buildBasicQuery(f, sess, "photos.photo_uid")
+	s, returnZeroResultsImmediately, err := buildBasicQuery(f, sess, "photos.photo_uid,photos.photo_month,photos.photo_year")
 
 	if err != nil {
 		return PhotoIDResults{}, err
@@ -762,7 +762,7 @@ func getPhotoIds(f form.SearchPhotos, sess *entity.Session) (results PhotoIDResu
 
 	if f.Merged {
 		// Return merged files.
-		s = s.Group("photos.id")
+		s = s.Group("photos.photo_uid,photos.photo_month,photos.photo_year")
 	}
 
 	// Query database.

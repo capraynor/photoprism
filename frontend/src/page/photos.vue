@@ -45,6 +45,7 @@
                      :photos="results"
                      :select-mode="selectMode"
                      :filter="filter"
+                     :ids="ids"
                      :total-count="totalCount"
                      :open-photo="openPhoto"
                      :edit-photo="editPhoto"
