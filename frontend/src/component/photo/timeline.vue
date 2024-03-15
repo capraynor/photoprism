@@ -137,7 +137,7 @@
         :start-index="photoVisibleArea.startPhotoCount"
         :end-index="photoVisibleArea.endPhotoCount"
         :ensurePhotoLoaded="ensurePhotoLoaded"
-        :onPhotoClicked="onTimewheelPhotoClicked"
+        :onNavigateByPercentage="onNavigateByPercentage"
       ></p-photo-time-wheel>
     </div>
   </template>
@@ -331,8 +331,8 @@
         }
         this.resizeObserver.unobserve(this.$refs.container);
       },
-      onTimewheelPhotoClicked(){
-        alert('timewheel photo clicked')
+      onNavigateByPercentage(data){
+          document.documentElement.scrollTop = (document.documentElement.offsetHeight) * data.scrollTo; 
       },
 
       // observeItems() {

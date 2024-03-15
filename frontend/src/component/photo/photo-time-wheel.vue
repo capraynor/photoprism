@@ -1,10 +1,10 @@
 <template>
     <div class="time-wheel">
-        <div class="time-wheel__timeline" @mousemove="onMouseMove" @mouseleave="onMouseLeave">
+        <div class="time-wheel__timeline" @mousemove="onMouseMove" @click="onMouseClick" @mouseleave="onMouseLeave">
             <div v-for="i in yearGroupedIDs" :key="`${i.Year}`" :style="{height: `${i.ids.length / ids.length * 100}%`}">
                 {{ i.Year }}
             </div>
-            <div class="time-wheel__hover-indicator" :style="{...hoverIndicator}"></div>
+            <div v-if="showHoverIndicator" class="time-wheel__hover-indicator" :style="{...hoverIndicator}"></div>
         <div class="time-wheel__scroll-indicator" :style="{...scrollIndicator}"></div>
         </div>
 
@@ -13,7 +13,10 @@
             <div v-for="index in (previewPhotoIndexes.endIndex - previewPhotoIndexes.startIndex)" v-if="!!photos[index + previewPhotoIndexes.startIndex]" class="time-wheel__photoPreviewPanel__photo"
             :style="`background-image: url(${photos[index + previewPhotoIndexes.startIndex].thumbnailUrl('tile_224')});`"
             >
-                <div class="time-wheel__photoPreviewPanel__date">{{ `${photos[index + previewPhotoIndexes.startIndex].Year}-${photos[index + previewPhotoIndexes.startIndex].Month}-${photos[index + previewPhotoIndexes.startIndex].Day}` }}</div>
+                <div class="time-wheel__photoPreviewPanel__date">
+                    <div>{{ photos[index + previewPhotoIndexes.startIndex].shortDateString() }}</div>
+                    <div>{{ photos[index + previewPhotoIndexes.startIndex].locationInfo() }}</div>
+                </div>
             </div>
         </div>
     </div>
@@ -35,6 +38,10 @@ export default {
             default: () => [],
         },
         onPhotoClicked: {
+            type: Function,
+            default: () => {}
+        },
+        onNavigateByPercentage: {
             type: Function,
             default: () => {}
         },
@@ -60,11 +67,20 @@ export default {
             this.hoverIndicatorPosition = hoverIndicatorPosition;
             await this.ensurePhotoLoaded(this.previewPhotoIndexes.startIndex, this.previewPhotoIndexes.endIndex)
             this.showPreviewPanel = true;
+            this.showHoverIndicator = true;
+            
+            if (e.buttons === 1 ){
+                this.onNavigateByPercentage({scrollTo: this.hoverIndicatorPosition});
+            }
+
+        },
+        onMouseClick(e){
+            this.onNavigateByPercentage({scrollTo: this.hoverIndicatorPosition});
         },
 
         onMouseLeave(){
-            this.hoverIndicator.display = "none";
-            this.showPreviewPanel = true;
+            this.showHoverIndicator = false;
+            this.showPreviewPanel = false;
         }
 
     },
@@ -154,8 +170,8 @@ export default {
         return {
             hoverIndicator: {
                 top: "0%",
-                display: "none",
             },
+            showHoverIndicator: false,
             hoverIndicatorPosition: 0,
             showPreviewPanel: false,
             mousePosition: {
