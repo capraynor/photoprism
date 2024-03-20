@@ -1,145 +1,152 @@
 <template>
-    <div ref="container" :style="{height: `${this.height}px`}" grid-list-xs fluid class="p-photos p-photo-mosaic p-photo-timeline">
-      <div v-if="totalCount === 0" class="pa-0">
-        <v-alert
-            :value="true"
-            color="secondary-dark"
-            :icon="isSharedView ? 'image_not_supported' : 'lightbulb_outline'"
-            class="no-results ma-2 opacity-70"
-            outline
-        >
-          <h3 v-if="filter.order === 'edited'" class="body-2 ma-0 pa-0">
-            <translate>No recently edited pictures</translate>
-          </h3>
-          <h3 v-else class="body-2 ma-0 pa-0">
-            <translate>No pictures found</translate>
-          </h3>
-          <p class="body-1 mt-2 mb-0 pa-0">
-            <translate>Try again using other filters or keywords.</translate>
-            <template v-if="!isSharedView">
-              <translate>In case pictures you expect are missing, please rescan your library and wait until indexing has been completed.</translate>
-              <template v-if="$config.feature('review')">
-                <translate>Non-photographic and low-quality images require a review before they appear in search results.</translate>
-              </template>
-            </template>
-          </p>
-        </v-alert>
-      </div>
-      <v-layout row wrap class="search-results photo-results mosaic-view timeline-view" :class="{'select-results': selectMode}">
-        
-
-        <div
-            v-for="(photo, index) in photos"
-            v-if="photo && isPhotoVisible(index)"
-            ref="items"
-            :key="index"
-            :data-index="index"
-            :style="getPhotoStyle(index)"
-        >
-         <!--
-           The following div is the layout + size container. It makes the browser not
-           re-layout all elements in the list when the children of one of them changes
-          -->
-          <div class="image-container">
-            <!-- <div v-if="index < firstVisibleElementIndex || index > lastVisibileElementIndex"
-                 :data-uid="photo.UID"
-                 class="card darken-1 result image"
-            ></div> -->
-            <div  
-                  :key="photo.Hash"
-                  tile
-                  :data-id="photo.ID"
-                  :data-uid="photo.UID"
-                  :style="`background-image: url(${photo.thumbnailUrl('tile_224')});`"
-                  :class="photo.classes().join(' ') + ' card darken-1 result clickable image'"
-                  :alt="photo.Title"
-                  :title="photo.Title"
-                  @contextmenu.stop="onContextMenu($event, index)"
-                  @touchstart.passive="input.touchStart($event, index)"
-                  @touchend.stop.prevent="onClick($event, index)"
-                  @mousedown.stop.prevent="input.mouseDown($event, index)"
-                  @click.stop.prevent="onClick($event, index)"
-                  @mouseover="playLive(photo)"
-                  @mouseleave="pauseLive(photo)">
-              <v-layout v-if="photo.Type === 'live' || photo.Type === 'animated'" class="live-player">
-                <video :id="'live-player-' + photo.ID" :key="photo.ID" width="224" height="224" preload="none"
-                       loop muted playsinline>
-                  <source :src="photo.videoUrl()">
-                </video>
-              </v-layout>
-  
-              <button v-if="photo.Type !== 'image' || photo.isStack()"
-                    class="input-open"
-                    @touchstart.stop.prevent="input.touchStart($event, index)"
-                    @touchend.stop.prevent="onOpen($event, index, !isSharedView, photo.Type === 'live')"
-                    @touchmove.stop.prevent
-                    @click.stop.prevent="onOpen($event, index, !isSharedView, photo.Type === 'live')">
-                <i v-if="photo.Type === 'raw'" class="action-raw" :title="$gettext('RAW')">raw_on</i>
-                <i v-if="photo.Type === 'live'" class="action-live" :title="$gettext('Live')"><icon-live-photo/></i>
-                <i v-if="photo.Type === 'video'" class="action-play" :title="$gettext('Video')">play_arrow</i>
-                <i v-if="photo.Type === 'animated'" class="action-animated" :title="$gettext('Animated')">gif</i>
-                <i v-if="photo.Type === 'vector'" class="action-vector" :title="$gettext('Vector')">font_download</i>
-                <i v-if="photo.Type === 'image'" class="action-stack" :title="$gettext('Stack')">burst_mode</i>
-              </button>
-  
-              <button v-if="photo.Type === 'image' && selectMode"
-                    class="input-view"
-                    :title="$gettext('View')"
-                    @touchstart.stop.prevent="input.touchStart($event, index)"
-                    @touchend.stop.prevent="onOpen($event, index)"
-                    @touchmove.stop.prevent
-                    @click.stop.prevent="onOpen($event, index)">
-                <i color="white" class="action-fullscreen">zoom_in</i>
-              </button>
-  
-              <button v-if="!isSharedView && hidePrivate && photo.Private" class="input-private">
-                <i color="white" class="select-on">lock</i>
-              </button>
-  
-              <!--
-                We'd usually use v-if here to only render the button if needed.
-                Because the button is supposed to be visible when the result is
-                being hovered over, implementing the v-if would require the use of
-                a <v-hover> element around the result.
-  
-                Because rendering the plain HTML-Button is faster than rendering
-                the v-hover component we instead hide the button by default and
-                use css to show it when it is being hovered.
-              -->
-              <button
-                    class="input-select"
-                    @mousedown.stop.prevent="input.mouseDown($event, index)"
-                    @touchstart.stop.prevent="input.touchStart($event, index)"
-                    @touchend.stop.prevent="onSelect($event, index)"
-                    @touchmove.stop.prevent
-                    @click.stop.prevent="onSelect($event, index)">
-                <i color="white" class="select-on">check_circle</i>
-                <i color="white" class="select-off">radio_button_off</i>
-              </button>
-  
-              <button v-if="!isSharedView"
-                  class="input-favorite"
-                  @touchstart.stop.prevent="input.touchStart($event, index)"
-                  @touchend.stop.prevent="toggleLike($event, index)"
-                  @touchmove.stop.prevent
-                  @click.stop.prevent="toggleLike($event, index)"
-              >
-                <i v-if="photo.Favorite">favorite</i>
-                <i v-else>favorite_border</i>
-              </button>
-            </div>
-          </div>
+  <div>
+    <div class="timeline-title">
+          <div class="timeline-title__time">{{ timelineTitle.timeFrom }}{{ timelineTitle.timeTo && ` ~ ${timelineTitle.timeTo}` }}</div>
+          <div class="timeline-title__position">{{ timelineTitle.places.join(",") }}</div>
         </div>
-      </v-layout>
-      <p-photo-time-wheel
-        :ids="ids"
-        :photos="photos"
-        :start-index="photoVisibleArea.startPhotoCount"
-        :end-index="photoVisibleArea.endPhotoCount"
-        :ensurePhotoLoaded="ensurePhotoLoaded"
-        :onNavigateByPercentage="onNavigateByPercentage"
-      ></p-photo-time-wheel>
+        <div ref="container" :style="{height: `${this.height}px`}" grid-list-xs fluid class="p-photos p-photo-mosaic p-photo-timeline">
+
+<div v-if="totalCount === 0" class="pa-0">
+  <v-alert
+      :value="true"
+      color="secondary-dark"
+      :icon="isSharedView ? 'image_not_supported' : 'lightbulb_outline'"
+      class="no-results ma-2 opacity-70"
+      outline
+  >
+    <h3 v-if="filter.order === 'edited'" class="body-2 ma-0 pa-0">
+      <translate>No recently edited pictures</translate>
+    </h3>
+    <h3 v-else class="body-2 ma-0 pa-0">
+      <translate>No pictures found</translate>
+    </h3>
+    <p class="body-1 mt-2 mb-0 pa-0">
+      <translate>Try again using other filters or keywords.</translate>
+      <template v-if="!isSharedView">
+        <translate>In case pictures you expect are missing, please rescan your library and wait until indexing has been completed.</translate>
+        <template v-if="$config.feature('review')">
+          <translate>Non-photographic and low-quality images require a review before they appear in search results.</translate>
+        </template>
+      </template>
+    </p>
+  </v-alert>
+</div>
+<v-layout row wrap class="search-results photo-results mosaic-view timeline-view" :class="{'select-results': selectMode}">
+
+  <div
+      v-for="(photo, index) in photos"
+      v-if="photo && isPhotoVisible(index)"
+      ref="items"
+      :key="index"
+      :data-index="index"
+      :style="getPhotoStyle(index)"
+  >
+   <!--
+     The following div is the layout + size container. It makes the browser not
+     re-layout all elements in the list when the children of one of them changes
+    -->
+    <div class="image-container">
+      <!-- <div v-if="index < firstVisibleElementIndex || index > lastVisibileElementIndex"
+           :data-uid="photo.UID"
+           class="card darken-1 result image"
+      ></div> -->
+      <div  
+            :key="photo.Hash"
+            tile
+            :data-id="photo.ID"
+            :data-uid="photo.UID"
+            :style="`background-image: url(${photo.thumbnailUrl('tile_224')});`"
+            :class="photo.classes().join(' ') + ' card darken-1 result clickable image'"
+            :alt="photo.Title"
+            :title="photo.Title"
+            @contextmenu.stop="onContextMenu($event, index)"
+            @touchstart.passive="input.touchStart($event, index)"
+            @touchend.stop.prevent="onClick($event, index)"
+            @mousedown.stop.prevent="input.mouseDown($event, index)"
+            @click.stop.prevent="onClick($event, index)"
+            @mouseover="playLive(photo)"
+            @mouseleave="pauseLive(photo)">
+        <v-layout v-if="photo.Type === 'live' || photo.Type === 'animated'" class="live-player">
+          <video :id="'live-player-' + photo.ID" :key="photo.ID" width="224" height="224" preload="none"
+                 loop muted playsinline>
+            <source :src="photo.videoUrl()">
+          </video>
+        </v-layout>
+
+        <button v-if="photo.Type !== 'image' || photo.isStack()"
+              class="input-open"
+              @touchstart.stop.prevent="input.touchStart($event, index)"
+              @touchend.stop.prevent="onOpen($event, index, !isSharedView, photo.Type === 'live')"
+              @touchmove.stop.prevent
+              @click.stop.prevent="onOpen($event, index, !isSharedView, photo.Type === 'live')">
+          <i v-if="photo.Type === 'raw'" class="action-raw" :title="$gettext('RAW')">raw_on</i>
+          <i v-if="photo.Type === 'live'" class="action-live" :title="$gettext('Live')"><icon-live-photo/></i>
+          <i v-if="photo.Type === 'video'" class="action-play" :title="$gettext('Video')">play_arrow</i>
+          <i v-if="photo.Type === 'animated'" class="action-animated" :title="$gettext('Animated')">gif</i>
+          <i v-if="photo.Type === 'vector'" class="action-vector" :title="$gettext('Vector')">font_download</i>
+          <i v-if="photo.Type === 'image'" class="action-stack" :title="$gettext('Stack')">burst_mode</i>
+        </button>
+
+        <button v-if="photo.Type === 'image' && selectMode"
+              class="input-view"
+              :title="$gettext('View')"
+              @touchstart.stop.prevent="input.touchStart($event, index)"
+              @touchend.stop.prevent="onOpen($event, index)"
+              @touchmove.stop.prevent
+              @click.stop.prevent="onOpen($event, index)">
+          <i color="white" class="action-fullscreen">zoom_in</i>
+        </button>
+
+        <button v-if="!isSharedView && hidePrivate && photo.Private" class="input-private">
+          <i color="white" class="select-on">lock</i>
+        </button>
+
+        <!--
+          We'd usually use v-if here to only render the button if needed.
+          Because the button is supposed to be visible when the result is
+          being hovered over, implementing the v-if would require the use of
+          a <v-hover> element around the result.
+
+          Because rendering the plain HTML-Button is faster than rendering
+          the v-hover component we instead hide the button by default and
+          use css to show it when it is being hovered.
+        -->
+        <button
+              class="input-select"
+              @mousedown.stop.prevent="input.mouseDown($event, index)"
+              @touchstart.stop.prevent="input.touchStart($event, index)"
+              @touchend.stop.prevent="onSelect($event, index)"
+              @touchmove.stop.prevent
+              @click.stop.prevent="onSelect($event, index)">
+          <i color="white" class="select-on">check_circle</i>
+          <i color="white" class="select-off">radio_button_off</i>
+        </button>
+
+        <button v-if="!isSharedView"
+            class="input-favorite"
+            @touchstart.stop.prevent="input.touchStart($event, index)"
+            @touchend.stop.prevent="toggleLike($event, index)"
+            @touchmove.stop.prevent
+            @click.stop.prevent="toggleLike($event, index)"
+        >
+          <i v-if="photo.Favorite">favorite</i>
+          <i v-else>favorite_border</i>
+        </button>
+      </div>
     </div>
+  </div>
+</v-layout>
+<p-photo-time-wheel
+  :ids="ids"
+  :photos="photos"
+  :start-index="photoVisibleArea.startPhotoCount"
+  :end-index="photoVisibleArea.endPhotoCount"
+  :ensurePhotoLoaded="ensurePhotoLoaded"
+  :onNavigateByPercentage="onNavigateByPercentage"
+></p-photo-time-wheel>
+</div>
+  </div>
+
   </template>
   <script>
   import {Input, InputInvalid, ClickShort, ClickLong} from "common/input";
@@ -249,8 +256,36 @@
             endPhotoCount
           }
         },
-      toolbarHeight() {
-        return document.querySelector(".p-photo-toolbar").scrollHeight;
+      headingHeight() {
+        const toolbarHeight = document.querySelector(".p-photo-toolbar").scrollHeight;
+        const titleHeight = document.querySelector(".timeline-title").scrollHeight;
+        return toolbarHeight + titleHeight;
+      },
+
+      timelineTitle(){
+        const allVisiblePhotos = this.photos.filter((p, i) => this.isPhotoVisible(i));
+        const result = {
+          places: [],
+          timeFrom: 0,
+          timeTo: 0
+        };
+        allVisiblePhotos.reduce((acc, cur) => {
+          if (!cur){
+            return acc;
+          }
+          if (!acc.places.includes(cur.locationInfo())){
+            acc.places.push(cur.locationInfo());
+          }
+
+          return acc;
+        }, result);
+
+        result.timeFrom = allVisiblePhotos[0]?.shortDateString();
+        result.timeTo = allVisiblePhotos[allVisiblePhotos.length - 1]?.shortDateString();
+        if (result.timeFrom === result.timeTo){
+          result.timeTo = undefined;
+        }
+        return result;
       }
     },
     beforeCreate() {
@@ -292,16 +327,16 @@
           width: `${this.lineHeight}px`,
           height: `${this.lineHeight}px`,
           left: `${(i % this.photosPerLine) * this.lineHeight}px`,
-          top: `${(parseInt(i / this.photosPerLine)) * this.lineHeight + this.toolbarHeight}px`
+          top: `${(parseInt(i / this.photosPerLine)) * this.lineHeight}px`
         };
 
         return result;
       },
       async onScrollDebounced(e){
         var scrollTop = window.scrollY;
-        var toolbarHeight = this.toolbarHeight;
+        var headingHeight = this.headingHeight;
         
-        this.scrollTop = scrollTop - toolbarHeight;
+        this.scrollTop = scrollTop - headingHeight;
         console.log(this);
         await this.updateDisplayPhotos();
       },

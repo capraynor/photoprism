@@ -248,6 +248,7 @@ footer {
 
 .p-photo-timeline{
     height: 100%;
+    position: relative;
 }
 
 .time-wheel{
@@ -314,4 +315,12 @@ footer {
     width: 140px;
     height: 140px;
     background-size: cover;
+}
+
+.timeline-title{
+    position: sticky;
+    z-index: 1;
+    top: 0;
+    background: rgb(28,29,30);
+    background: linear-gradient(180deg, rgba(28,29,30,1) 22%, rgba(0,0,0,0.23) 100%);
 }

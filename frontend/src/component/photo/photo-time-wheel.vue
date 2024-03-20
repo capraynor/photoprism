@@ -1,6 +1,6 @@
 <template>
     <div class="time-wheel">
-        <div class="time-wheel__timeline" @mousemove="onMouseMove" @click="onMouseClick" @mouseleave="onMouseLeave">
+        <div class="time-wheel__timeline" @mousemove="onMouseMove" @mouseleave="onMouseLeave" @click="onMouseClick" >
             <div v-for="i in yearGroupedIDs" :key="`${i.Year}`" :style="{height: `${i.ids.length / ids.length * 100}%`}">
                 {{ i.Year }}
             </div>
@@ -65,13 +65,12 @@ export default {
             this.hoverIndicator.top = hoverIndicatorTop;
             this.hoverIndicator.display = "block"
             this.hoverIndicatorPosition = hoverIndicatorPosition;
-            await this.ensurePhotoLoaded(this.previewPhotoIndexes.startIndex, this.previewPhotoIndexes.endIndex)
             this.showPreviewPanel = true;
             this.showHoverIndicator = true;
-            
             if (e.buttons === 1 ){
                 this.onNavigateByPercentage({scrollTo: this.hoverIndicatorPosition});
             }
+            await this.ensurePhotoLoaded(this.previewPhotoIndexes.startIndex, this.previewPhotoIndexes.endIndex)
 
         },
         onMouseClick(e){
@@ -117,8 +116,6 @@ export default {
             if ((top - (450 / 2)) <  0){
                 top = 0 + (450/2);
             }
-
-            
 
             return {
                 top: `${top}px`
