@@ -3,11 +3,11 @@ package form
 import (
 	"github.com/urfave/cli"
 
-	"github.com/photoprism/photoprism/internal/acl"
+	"github.com/photoprism/photoprism/internal/auth/acl"
 	"github.com/photoprism/photoprism/pkg/authn"
 	"github.com/photoprism/photoprism/pkg/clean"
 	"github.com/photoprism/photoprism/pkg/rnd"
-	"github.com/photoprism/photoprism/pkg/unix"
+	"github.com/photoprism/photoprism/pkg/time/unix"
 )
 
 // Client represents client application settings.
@@ -35,7 +35,7 @@ func NewClient() Client {
 		ClientSecret: "",
 		ClientName:   "",
 		ClientRole:   acl.RoleClient.String(),
-		AuthProvider: authn.ProviderClientCredentials.String(),
+		AuthProvider: authn.ProviderClient.String(),
 		AuthMethod:   authn.MethodOAuth2.String(),
 		AuthScope:    "",
 		AuthExpires:  3600,
@@ -79,7 +79,7 @@ func AddClientFromCli(ctx *cli.Context) Client {
 	f.AuthProvider = authn.Provider(ctx.String("provider")).String()
 
 	if f.AuthProvider == "" {
-		f.AuthProvider = authn.ProviderClientCredentials.String()
+		f.AuthProvider = authn.ProviderClient.String()
 	}
 
 	f.AuthMethod = authn.Method(ctx.String("method")).String()

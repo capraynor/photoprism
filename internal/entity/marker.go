@@ -10,9 +10,9 @@ import (
 	"github.com/dustin/go-humanize/english"
 	"github.com/jinzhu/gorm"
 
-	"github.com/photoprism/photoprism/internal/crop"
-	"github.com/photoprism/photoprism/internal/face"
+	"github.com/photoprism/photoprism/internal/ai/face"
 	"github.com/photoprism/photoprism/internal/form"
+	"github.com/photoprism/photoprism/internal/thumb/crop"
 	"github.com/photoprism/photoprism/pkg/clean"
 	"github.com/photoprism/photoprism/pkg/rnd"
 )
@@ -87,7 +87,7 @@ func NewMarker(file File, area crop.Area, subjUID, markerSrc, markerType string,
 		Y:             area.Y,
 		W:             area.W,
 		H:             area.H,
-		Q:             int(float32(math.Log(float64(score))) * float32(size) * area.W),
+		Q:             int(math.Log(float64(score)) * ((float64(size) * float64(area.W)) / 2)),
 		Size:          size,
 		Score:         score,
 		Thumb:         area.Thumb(file.FileHash),
@@ -255,7 +255,7 @@ func (m *Marker) SetFace(f *Face, dist float64) (updated bool, err error) {
 	// Skip update if the same face is already set.
 	if m.SubjUID == f.SubjUID && m.FaceID == f.ID {
 		// Update matching timestamp.
-		m.MatchedAt = TimePointer()
+		m.MatchedAt = TimeStamp()
 		return false, m.Updates(Map{"MatchedAt": m.MatchedAt})
 	}
 
@@ -300,7 +300,7 @@ func (m *Marker) SetFace(f *Face, dist float64) (updated bool, err error) {
 	updated = m.FaceID != faceID || m.SubjUID != subjUID || m.SubjSrc != subjSrc
 
 	// Update matching timestamp.
-	m.MatchedAt = TimePointer()
+	m.MatchedAt = TimeStamp()
 
 	if err := m.Updates(Map{"FaceID": m.FaceID, "FaceDist": m.FaceDist, "SubjUID": m.SubjUID, "SubjSrc": m.SubjSrc, "MarkerReview": false, "MatchedAt": m.MatchedAt}); err != nil {
 		return false, err
@@ -547,7 +547,7 @@ func (m *Marker) ClearFace() (updated bool, err error) {
 	// Remove face references.
 	m.face = nil
 	m.FaceID = ""
-	m.MatchedAt = TimePointer()
+	m.MatchedAt = TimeStamp()
 
 	// Remove subject if set automatically.
 	if m.SubjSrc == SrcAuto {
@@ -584,7 +584,7 @@ func (m *Marker) RefreshPhotos() error {
 
 // Matched updates the match timestamp.
 func (m *Marker) Matched() error {
-	m.MatchedAt = TimePointer()
+	m.MatchedAt = TimeStamp()
 	return UnscopedDb().Model(m).UpdateColumns(Map{"MatchedAt": m.MatchedAt}).Error
 }
 

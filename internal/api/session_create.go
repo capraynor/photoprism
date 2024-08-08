@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -8,16 +9,18 @@ import (
 	"github.com/photoprism/photoprism/internal/entity"
 	"github.com/photoprism/photoprism/internal/event"
 	"github.com/photoprism/photoprism/internal/form"
-	"github.com/photoprism/photoprism/internal/get"
-	"github.com/photoprism/photoprism/internal/i18n"
+	"github.com/photoprism/photoprism/internal/photoprism/get"
 	"github.com/photoprism/photoprism/internal/server/limiter"
+	"github.com/photoprism/photoprism/pkg/authn"
 	"github.com/photoprism/photoprism/pkg/header"
+	"github.com/photoprism/photoprism/pkg/i18n"
 )
 
 // CreateSession creates a new client session and returns it as JSON if authentication was successful.
 //
-// POST /api/v1/session
-// POST /api/v1/sessions
+//	@Tags	Authentication
+//	@Router	/api/v1/session [post]
+//	@Router	/api/v1/sessions [post]
 func CreateSession(router *gin.RouterGroup) {
 	createSessionHandler := func(c *gin.Context) {
 		// Prevent CDNs from caching this endpoint.
@@ -30,7 +33,7 @@ func CreateSession(router *gin.RouterGroup) {
 
 		clientIp := ClientIP(c)
 
-		// Validate request data.
+		// Assign and validate request form values.
 		if err := c.BindJSON(&f); err != nil {
 			event.AuditWarn([]string{clientIp, "create session", "invalid request", "%s"}, err)
 			AbortBadRequest(c)
@@ -54,14 +57,23 @@ func CreateSession(router *gin.RouterGroup) {
 			return
 		}
 
-		// Fail if authentication error rate limit is exceeded.
-		if clientIp != "" && (limiter.Login.Reject(clientIp) || limiter.Auth.Reject(clientIp)) {
+		// Check request rate limit.
+		var r *limiter.Request
+		if f.HasPasscode() {
+			r = limiter.Login.RequestN(clientIp, 3)
+		} else {
+			r = limiter.Login.Request(clientIp)
+		}
+
+		// Abort if failure rate limit is exceeded.
+		if r.Reject() || limiter.Auth.Reject(clientIp) {
 			limiter.AbortJSON(c)
 			return
 		}
 
 		var sess *entity.Session
 		var isNew bool
+		var err error
 
 		// Find existing session, if any.
 		if s := Session(clientIp, AuthToken(c)); s != nil {
@@ -73,11 +85,28 @@ func CreateSession(router *gin.RouterGroup) {
 			isNew = true
 		}
 
-		// Try to log in and save session if successful.
-		if err := sess.LogIn(f, c); err != nil {
-			c.AbortWithStatusJSON(sess.HttpStatus(), gin.H{"error": i18n.Msg(i18n.ErrInvalidCredentials)})
+		// Check authentication credentials.
+		if err = sess.LogIn(f, c); err != nil {
+			if sess.Method().IsNot(authn.Method2FA) {
+				c.AbortWithStatusJSON(sess.HttpStatus(), gin.H{"error": i18n.Msg(i18n.ErrInvalidCredentials)})
+			} else if errors.Is(err, authn.ErrPasscodeRequired) {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": err.Error(), "code": 32, "message": i18n.Msg(i18n.ErrPasscodeRequired)})
+				// Return the reserved request rate limit tokens if password is correct, even if the verification code is missing.
+				r.Success()
+			} else {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": err.Error(), "code": http.StatusUnauthorized, "message": i18n.Msg(i18n.ErrInvalidPasscode)})
+			}
 			return
-		} else if sess, err = get.Session().Save(sess); err != nil {
+		}
+
+		// Extend session lifetime if 2-Factor Authentication (2FA) is enabled for the account.
+		if sess.Is2FA() && !sess.IsClient() {
+			sess.SetExpiresIn(conf.SessionMaxAge() * 2)
+			sess.SetTimeout(conf.SessionTimeout() * 2)
+		}
+
+		// Save session after successful authentication.
+		if sess, err = get.Session().Save(sess); err != nil {
 			event.AuditErr([]string{clientIp, "%s"}, err)
 			c.AbortWithStatusJSON(sess.HttpStatus(), gin.H{"error": i18n.Msg(i18n.ErrInvalidCredentials)})
 			return
@@ -89,6 +118,9 @@ func CreateSession(router *gin.RouterGroup) {
 		} else {
 			event.AuditInfo([]string{clientIp, "session %s", "updated"}, sess.RefID)
 		}
+
+		// Return the reserved request rate limit tokens after successful authentication.
+		r.Success()
 
 		// Response includes user data, session data, and client config values.
 		response := CreateSessionResponse(sess.AuthToken(), sess, conf.ClientSession(sess))

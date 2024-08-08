@@ -9,18 +9,19 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/dustin/go-humanize/english"
 	"github.com/sevlyar/go-daemon"
 	"github.com/urfave/cli"
 
-	"github.com/photoprism/photoprism/internal/auto"
+	"github.com/photoprism/photoprism/internal/auth/session"
 	"github.com/photoprism/photoprism/internal/mutex"
-	"github.com/photoprism/photoprism/internal/photoprism"
+	"github.com/photoprism/photoprism/internal/photoprism/backup"
 	"github.com/photoprism/photoprism/internal/server"
-	"github.com/photoprism/photoprism/internal/session"
 	"github.com/photoprism/photoprism/internal/workers"
+	"github.com/photoprism/photoprism/internal/workers/auto"
 	"github.com/photoprism/photoprism/pkg/clean"
 	"github.com/photoprism/photoprism/pkg/fs"
-	"github.com/photoprism/photoprism/pkg/report"
+	"github.com/photoprism/photoprism/pkg/txt/report"
 )
 
 // StartCommand configures the command name, flags, and action.
@@ -99,16 +100,16 @@ func startAction(ctx *cli.Context) error {
 			return nil
 		}
 
-		child, err := dctx.Reborn()
-		if err != nil {
-			log.Fatal(err)
+		child, contextErr := dctx.Reborn()
+
+		if contextErr != nil {
+			return fmt.Errorf("daemon context error: %w", contextErr)
 		}
 
 		if child != nil {
 			if writeErr := fs.WriteString(conf.PIDFilename(), strconv.Itoa(child.Pid)); writeErr != nil {
 				log.Error(writeErr)
-				log.Fatalf("failed writing process id to %s", clean.Log(conf.PIDFilename()))
-				return nil
+				return fmt.Errorf("failed writing process id to %s", clean.Log(conf.PIDFilename()))
 			}
 
 			log.Infof("daemon started with process id %v\n", child.Pid)
@@ -116,22 +117,28 @@ func startAction(ctx *cli.Context) error {
 		}
 	}
 
+	// Show info if read-only mode is enabled.
 	if conf.ReadOnly() {
 		log.Infof("config: enabled read-only mode")
 	}
 
-	// Start Web server.
+	// Start built-in web server.
 	go server.Start(cctx, conf)
 
-	if count, err := photoprism.RestoreAlbums(conf.AlbumsPath(), false); err != nil {
-		log.Errorf("restore: %s", err)
+	// Restore albums from YAML files.
+	if count, restoreErr := backup.RestoreAlbums(conf.BackupAlbumsPath(), false); restoreErr != nil {
+		log.Errorf("restore: %s (albums)", restoreErr)
 	} else if count > 0 {
-		log.Infof("%d albums restored", count)
+		log.Infof("restore: %s restored", english.Plural(count, "album backup", "album backups"))
 	}
 
-	// Start background workers.
-	session.Monitor(time.Hour)
+	// Start worker that periodically deletes expired sessions.
+	session.Cleanup(conf.SessionCacheDuration() * 4)
+
+	// Start sync and metadata maintenance background workers.
 	workers.Start(conf)
+
+	// Start auto-indexing background worker.
 	auto.Start(conf)
 
 	// Wait for signal to initiate server shutdown.
@@ -141,16 +148,16 @@ func startAction(ctx *cli.Context) error {
 	sig := <-quit
 
 	// Stop all background activity.
-	auto.Stop()
-	workers.Stop()
+	auto.Shutdown()
+	workers.Shutdown()
 	session.Shutdown()
 	mutex.CancelAll()
 
 	log.Info("shutting down...")
 	cancel()
 
-	if err := dctx.Release(); err != nil {
-		log.Error(err)
+	if contextErr := dctx.Release(); contextErr != nil {
+		log.Error(contextErr)
 	}
 
 	// Finally, close the DB connection after a short grace period.

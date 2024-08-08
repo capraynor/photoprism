@@ -6,11 +6,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
 
-	"github.com/photoprism/photoprism/internal/acl"
+	"github.com/photoprism/photoprism/internal/auth/acl"
+	"github.com/photoprism/photoprism/internal/entity/search"
 	"github.com/photoprism/photoprism/internal/event"
 	"github.com/photoprism/photoprism/internal/form"
-	"github.com/photoprism/photoprism/internal/get"
-	"github.com/photoprism/photoprism/internal/search"
+	"github.com/photoprism/photoprism/internal/photoprism/get"
 	"github.com/photoprism/photoprism/pkg/clean"
 	"github.com/photoprism/photoprism/pkg/header"
 	"github.com/photoprism/photoprism/pkg/txt"
@@ -50,7 +50,7 @@ func SearchGeo(router *gin.RouterGroup) {
 		// Ignore private flag if feature is disabled.
 		if f.Scope == "" &&
 			settings.Features.Review &&
-			acl.Resources.Deny(acl.ResourcePhotos, s.UserRole(), acl.ActionManage) {
+			acl.Rules.Deny(acl.ResourcePhotos, s.UserRole(), acl.ActionManage) {
 			f.Quality = 3
 		}
 

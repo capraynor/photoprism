@@ -1,14 +1,14 @@
 package config
 
 import (
-	"github.com/photoprism/photoprism/internal/acl"
-	"github.com/photoprism/photoprism/internal/customize"
+	"github.com/photoprism/photoprism/internal/auth/acl"
+	"github.com/photoprism/photoprism/internal/config/customize"
 	"github.com/photoprism/photoprism/internal/entity"
-	"github.com/photoprism/photoprism/internal/i18n"
 	"github.com/photoprism/photoprism/pkg/fs"
+	"github.com/photoprism/photoprism/pkg/i18n"
 )
 
-// initSettings initializes user settings from a config file.
+// initSettings initializes the customization settings from the "settings.yml" file.
 func (c *Config) initSettings() {
 	if c.settings != nil {
 		return
@@ -43,6 +43,7 @@ func (c *Config) initSettings() {
 
 // Settings returns the global app settings.
 func (c *Config) Settings() *customize.Settings {
+	// Load settings from the "settings.yml" config file.
 	c.initSettings()
 
 	if c.DisablePlaces() {
@@ -73,7 +74,7 @@ func (c *Config) SessionSettings(sess *entity.Session) *customize.Settings {
 	}
 
 	if sess.NoUser() && sess.IsClient() {
-		return c.Settings().ApplyACL(acl.Resources, sess.ClientRole()).ApplyScope(sess.Scope())
+		return c.Settings().ApplyACL(acl.Rules, sess.ClientRole()).ApplyScope(sess.Scope())
 	}
 
 	user := sess.User()
@@ -84,7 +85,7 @@ func (c *Config) SessionSettings(sess *entity.Session) *customize.Settings {
 	}
 
 	// Apply role-based permissions and user settings to a copy of the global app settings.
-	return user.Settings().ApplyTo(c.Settings().ApplyACL(acl.Resources, user.AclRole())).ApplyScope(sess.Scope())
+	return user.Settings().ApplyTo(c.Settings().ApplyACL(acl.Rules, user.AclRole())).ApplyScope(sess.Scope())
 }
 
 // PublicSettings returns the public app settings.
@@ -102,7 +103,7 @@ func (c *Config) PublicSettings() *customize.Settings {
 
 // ShareSettings returns the app settings for share link visitors.
 func (c *Config) ShareSettings() *customize.Settings {
-	settings := c.Settings().ApplyACL(acl.Resources, acl.RoleVisitor)
+	settings := c.Settings().ApplyACL(acl.Rules, acl.RoleVisitor)
 
 	return &customize.Settings{
 		UI:       settings.UI,

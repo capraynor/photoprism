@@ -43,6 +43,7 @@ export default class Session {
     this.storage_key = "sessionStorage";
     this.auth = false;
     this.config = config;
+    this.provider = "";
     this.user = new User(false);
     this.data = null;
 
@@ -54,10 +55,7 @@ export default class Session {
     }
 
     // Restore authentication from session storage.
-    if (
-      this.applyAuthToken(this.storage.getItem("authToken")) &&
-      this.applyId(this.storage.getItem("sessionId"))
-    ) {
+    if (this.applyAuthToken(this.storage.getItem("authToken")) && this.applyId(this.storage.getItem("sessionId"))) {
       const dataJson = this.storage.getItem("sessionData");
       if (dataJson !== "undefined") {
         this.data = JSON.parse(dataJson);
@@ -66,6 +64,11 @@ export default class Session {
       const userJson = this.storage.getItem("user");
       if (userJson !== "undefined") {
         this.user = new User(JSON.parse(userJson));
+      }
+
+      const provider = this.storage.getItem("provider");
+      if (provider !== null) {
+        this.provider = provider;
       }
     }
 
@@ -203,7 +206,21 @@ export default class Session {
   }
 
   getProvider() {
+    if (!this.provider) {
+      return "";
+    }
+
     return this.provider;
+  }
+
+  hasPassword() {
+    switch (this.getProvider()) {
+      case "local":
+      case "ldap":
+        return true;
+      default:
+        return false;
+    }
   }
 
   hasProvider() {
@@ -382,10 +399,10 @@ export default class Session {
     return LoginPage === window.location.href.substring(window.location.href.lastIndexOf("/") + 1);
   }
 
-  login(username, password, token) {
+  login(username, password, code, token) {
     this.reset();
 
-    return Api.post("session", { username, password, token }).then((resp) => {
+    return Api.post("session", { username, password, code, token }).then((resp) => {
       const reload = this.config.getLanguage() !== resp.data?.config?.settings?.ui?.language;
       this.setResp(resp);
       this.onLogin();
@@ -438,13 +455,38 @@ export default class Session {
     });
   }
 
+  createApp(client_name, scope, expires_in, password) {
+    if (!this.isUser() || !this.user.Name) {
+      return Promise.reject();
+    }
+
+    if (!scope) {
+      scope = "*";
+    }
+
+    return Api.post("oauth/token", {
+      grant_type: password ? "password" : "session",
+      client_name: client_name,
+      scope: scope,
+      expires_in: expires_in,
+      username: this.user.Name,
+      password: password,
+    }).then((response) => Promise.resolve(response.data));
+  }
+
+  deleteApp(token) {
+    return Api.post("oauth/revoke", {
+      token: token,
+    }).then((response) => Promise.resolve(response.data));
+  }
+
   onLogout(noRedirect) {
     // Delete all authentication and session data.
     this.reset();
 
     // Perform redirect?
     if (noRedirect !== true && !this.isLogin()) {
-      window.location = this.config.baseUri + "/";
+      window.location = this.config.loginUri;
     }
 
     return Promise.resolve();

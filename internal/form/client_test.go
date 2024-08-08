@@ -13,7 +13,7 @@ import (
 func TestNewClient(t *testing.T) {
 	t.Run("Defaults", func(t *testing.T) {
 		client := NewClient()
-		assert.Equal(t, authn.ProviderClientCredentials, client.Provider())
+		assert.Equal(t, authn.ProviderClient, client.Provider())
 		assert.Equal(t, authn.MethodOAuth2, client.Method())
 		assert.Equal(t, "", client.Scope())
 		assert.Equal(t, "", client.Name())
@@ -38,7 +38,7 @@ func TestAddClientFromCli(t *testing.T) {
 		assert.NoError(t, ctx.Set("name", "Test"))
 		assert.NoError(t, ctx.Set("scope", "*"))
 		assert.NoError(t, ctx.Set("provider", "client_credentials"))
-		assert.NoError(t, ctx.Set("method", "totp"))
+		assert.NoError(t, ctx.Set("method", "oauth2"))
 
 		//t.Logf("ARGS: %#v", ctx.Args())
 
@@ -52,8 +52,8 @@ func TestAddClientFromCli(t *testing.T) {
 		client := AddClientFromCli(ctx)
 
 		// Check form values.
-		assert.Equal(t, authn.ProviderClientCredentials, client.Provider())
-		assert.Equal(t, authn.MethodTOTP, client.Method())
+		assert.Equal(t, authn.ProviderClient, client.Provider())
+		assert.Equal(t, authn.MethodOAuth2, client.Method())
 		assert.Equal(t, "*", client.Scope())
 		assert.Equal(t, "Test", client.Name())
 	})
@@ -109,7 +109,7 @@ func TestModClientFromCli(t *testing.T) {
 		assert.NoError(t, ctx.Set("name", "Test"))
 		assert.NoError(t, ctx.Set("scope", "*"))
 		assert.NoError(t, ctx.Set("provider", "client_credentials"))
-		assert.NoError(t, ctx.Set("method", "totp"))
+		assert.NoError(t, ctx.Set("method", "oauth2"))
 		assert.NoError(t, ctx.Set("role", "visitor"))
 		assert.NoError(t, ctx.Set("secret", "xcCbOrw6I0vcoXzhnOmXhjpVSyFq9ijh"))
 		assert.NoError(t, ctx.Set("expires", "600"))
@@ -125,8 +125,8 @@ func TestModClientFromCli(t *testing.T) {
 		client := ModClientFromCli(ctx)
 
 		// Check form values.
-		assert.Equal(t, authn.ProviderClientCredentials, client.Provider())
-		assert.Equal(t, authn.MethodTOTP, client.Method())
+		assert.Equal(t, authn.ProviderClient, client.Provider())
+		assert.Equal(t, authn.MethodOAuth2, client.Method())
 		assert.Equal(t, "*", client.Scope())
 		assert.Equal(t, "Test", client.Name())
 		assert.Equal(t, "visitor", client.Role())
@@ -145,6 +145,10 @@ func TestClient_Expires(t *testing.T) {
 		c := Client{AuthExpires: 999999999}
 		assert.Equal(t, int64(2678400), c.Expires())
 	})
+	t.Run("0", func(t *testing.T) {
+		c := Client{AuthExpires: 0}
+		assert.Equal(t, int64(0), c.Expires())
+	})
 }
 
 func TestClient_Tokens(t *testing.T) {
@@ -155,5 +159,30 @@ func TestClient_Tokens(t *testing.T) {
 	t.Run("ToBig", func(t *testing.T) {
 		c := Client{AuthTokens: 9147483647}
 		assert.Equal(t, int64(2147483647), c.Tokens())
+	})
+	t.Run("0", func(t *testing.T) {
+		c := Client{AuthTokens: 0}
+		assert.Equal(t, int64(0), c.Tokens())
+	})
+}
+func TestClient_ID(t *testing.T) {
+	t.Run("Valid", func(t *testing.T) {
+		c := Client{ClientID: "cs5cpu17n6gj2qo5"}
+		assert.Equal(t, "cs5cpu17n6gj2qo5", c.ID())
+	})
+	t.Run("Invalid", func(t *testing.T) {
+		c := Client{ClientID: "xs5cpu17n6gj2qo5"}
+		assert.Equal(t, "", c.ID())
+	})
+}
+
+func TestClient_Secret(t *testing.T) {
+	t.Run("Valid", func(t *testing.T) {
+		c := Client{ClientSecret: "LKHTREDSAWCVGHBNJUYTREWSDFLOIUYG"}
+		assert.Equal(t, "LKHTREDSAWCVGHBNJUYTREWSDFLOIUYG", c.Secret())
+	})
+	t.Run("Invalid", func(t *testing.T) {
+		c := Client{ClientSecret: "xxx"}
+		assert.Equal(t, "", c.Secret())
 	})
 }

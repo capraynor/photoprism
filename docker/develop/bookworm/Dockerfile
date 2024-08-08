@@ -31,6 +31,7 @@ ENV PHOTOPRISM_ARCH=$TARGETARCH \
     DEBIAN_FRONTEND="noninteractive" \
     TMPDIR="/tmp" \
     TF_CPP_MIN_LOG_LEVEL="0" \
+    MALLOC_ARENA_MAX="4" \
     GOPATH="/go" \
     GOBIN="/usr/local/bin" \
     GO111MODULE="on" \
@@ -54,9 +55,9 @@ RUN echo 'APT::Acquire::Retries "3";' > /etc/apt/apt.conf.d/80retries && \
         libc6 ca-certificates sudo bash tzdata \
         gpg zip unzip wget curl rsync make nano \
         jq lsof lshw sqlite3 mariadb-client imagemagick libvips-dev \
-        exiftool darktable rawtherapee libheif-examples librsvg2-bin \
-        ffmpeg libavcodec-extra x264 x265 libvpx7 libwebm1 \
-        libmatroska7 libdvdread8 libebml5 libgav1-bin libatomic1 \
+        exiftool rawtherapee libheif-examples librsvg2-bin \
+        ffmpeg libavcodec-extra libdav1d-dev x264 x265 libvpx-dev libwebm-dev \
+        libmatroska-dev libdvdread-dev libebml5 libgav1-bin libatomic1 \
     && \
     apt-get -qq install \
         apt-utils pkg-config software-properties-common \
@@ -68,6 +69,7 @@ RUN echo 'APT::Acquire::Retries "3";' > /etc/apt/apt.conf.d/80retries && \
     && \
     /scripts/install-nodejs.sh && \
     /scripts/install-tensorflow.sh && \
+    /scripts/install-darktable.sh && \
     /scripts/install-go.sh && \
     /scripts/install-go-tools.sh && \
     echo 'alias go=richgo ll="ls -alh"' >> /etc/skel/.bashrc && \
@@ -75,7 +77,6 @@ RUN echo 'APT::Acquire::Retries "3";' > /etc/apt/apt.conf.d/80retries && \
     echo "ALL ALL=(ALL) NOPASSWD:SETENV: ALL" >> /etc/sudoers.d/all && \
     cp /etc/skel/.bashrc /root/.bashrc && \
     /scripts/create-users.sh && \
-    cp /scripts/heif-convert.sh /usr/local/bin/heif-convert && \
     install -d -m 0777 -o 1000 -g 1000 \
         /photoprism/originals \
         /photoprism/import \

@@ -8,27 +8,27 @@ import (
 	"time"
 
 	"github.com/dustin/go-humanize/english"
-
 	"github.com/gin-gonic/gin"
 	"github.com/jinzhu/gorm"
 
-	"github.com/photoprism/photoprism/internal/acl"
+	"github.com/photoprism/photoprism/internal/auth/acl"
 	"github.com/photoprism/photoprism/internal/event"
-	"github.com/photoprism/photoprism/internal/i18n"
+	"github.com/photoprism/photoprism/internal/server/limiter"
 	"github.com/photoprism/photoprism/pkg/authn"
 	"github.com/photoprism/photoprism/pkg/clean"
 	"github.com/photoprism/photoprism/pkg/header"
+	"github.com/photoprism/photoprism/pkg/i18n"
 	"github.com/photoprism/photoprism/pkg/list"
-	"github.com/photoprism/photoprism/pkg/report"
 	"github.com/photoprism/photoprism/pkg/rnd"
+	"github.com/photoprism/photoprism/pkg/time/unix"
 	"github.com/photoprism/photoprism/pkg/txt"
-	"github.com/photoprism/photoprism/pkg/unix"
+	"github.com/photoprism/photoprism/pkg/txt/report"
 )
 
 // SessionPrefix for RefID.
 const (
 	SessionPrefix = "sess"
-	UnknownIP     = "0.0.0.0"
+	UnknownIP     = limiter.DefaultIP
 )
 
 // Sessions represents a list of sessions.
@@ -47,17 +47,18 @@ type Session struct {
 	client        *Client         `gorm:"-" yaml:"-"`
 	AuthProvider  string          `gorm:"type:VARBINARY(128);default:'';" json:"AuthProvider" yaml:"AuthProvider,omitempty"`
 	AuthMethod    string          `gorm:"type:VARBINARY(128);default:'';" json:"AuthMethod" yaml:"AuthMethod,omitempty"`
-	AuthDomain    string          `gorm:"type:VARBINARY(255);default:'';" json:"AuthDomain" yaml:"AuthDomain,omitempty"`
+	AuthIssuer    string          `gorm:"type:VARBINARY(255);default:'';" json:"AuthIssuer,omitempty" yaml:"AuthIssuer,omitempty"`
 	AuthID        string          `gorm:"type:VARBINARY(255);index;default:'';" json:"AuthID" yaml:"AuthID,omitempty"`
 	AuthScope     string          `gorm:"size:1024;default:'';" json:"AuthScope" yaml:"AuthScope,omitempty"`
+	GrantType     string          `gorm:"type:VARBINARY(64);default:'';" json:"GrantType" yaml:"GrantType,omitempty"`
 	LastActive    int64           `json:"LastActive" yaml:"LastActive,omitempty"`
 	SessExpires   int64           `gorm:"index" json:"Expires" yaml:"Expires,omitempty"`
 	SessTimeout   int64           `json:"Timeout" yaml:"Timeout,omitempty"`
 	PreviewToken  string          `gorm:"type:VARBINARY(64);column:preview_token;default:'';" json:"-" yaml:"-"`
 	DownloadToken string          `gorm:"type:VARBINARY(64);column:download_token;default:'';" json:"-" yaml:"-"`
 	AccessToken   string          `gorm:"type:VARBINARY(4096);column:access_token;default:'';" json:"-" yaml:"-"`
-	RefreshToken  string          `gorm:"type:VARBINARY(512);column:refresh_token;default:'';" json:"-" yaml:"-"`
-	IdToken       string          `gorm:"type:VARBINARY(1024);column:id_token;default:'';" json:"IdToken,omitempty" yaml:"IdToken,omitempty"`
+	RefreshToken  string          `gorm:"type:VARBINARY(2048);column:refresh_token;default:'';" json:"-" yaml:"-"`
+	IdToken       string          `gorm:"type:VARBINARY(2048);column:id_token;default:'';" json:"IdToken,omitempty" yaml:"IdToken,omitempty"`
 	UserAgent     string          `gorm:"size:512;" json:"UserAgent" yaml:"UserAgent,omitempty"`
 	DataJSON      json.RawMessage `gorm:"type:VARBINARY(4096);" json:"-" yaml:"Data,omitempty"`
 	data          *SessionData    `gorm:"-" yaml:"-"`
@@ -74,97 +75,19 @@ func (Session) TableName() string {
 	return "auth_sessions"
 }
 
-// NewSession creates a new session using the maxAge and timeout in seconds.
-func NewSession(lifetime, timeout int64) (m *Session) {
+// NewSession creates a new session with the expiration and idle time specified in seconds (-1 for infinite).
+func NewSession(expiresIn, timeout int64) (m *Session) {
 	m = &Session{}
 
 	m.Regenerate()
 
-	if lifetime > 0 {
-		m.SessExpires = TimeStamp().Unix() + lifetime
-	}
+	// Set session expiration time in seconds (-1 for infinite).
+	m.SetExpiresIn(expiresIn)
 
-	if timeout > 0 {
-		m.SessTimeout = timeout
-	}
+	// Set session idle time in seconds (-1 for infinite).
+	m.SetTimeout(timeout)
 
 	return m
-}
-
-// Expires sets an explicit expiration time.
-func (m *Session) Expires(t time.Time) *Session {
-	if t.IsZero() {
-		return m
-	}
-
-	m.SessExpires = t.Unix()
-	return m
-}
-
-// DeleteExpiredSessions deletes all expired sessions.
-func DeleteExpiredSessions() (deleted int) {
-	found := Sessions{}
-
-	if err := Db().Where("sess_expires > 0 AND sess_expires < ?", unix.Time()).Find(&found).Error; err != nil {
-		event.AuditErr([]string{"failed to fetch expired sessions", "%s"}, err)
-		return deleted
-	}
-
-	for _, sess := range found {
-		if err := sess.Delete(); err != nil {
-			event.AuditErr([]string{sess.IP(), "session %s", "failed to delete", "%s"}, sess.RefID, err)
-		} else {
-			deleted++
-		}
-	}
-
-	return deleted
-}
-
-// DeleteClientSessions deletes client sessions above the specified limit.
-func DeleteClientSessions(client *Client, authMethod authn.MethodType, limit int64) (deleted int) {
-	if limit < 0 {
-		return 0
-	} else if client == nil {
-		return 0
-	}
-
-	q := Db()
-
-	if client.HasUID() {
-		q = q.Where("client_uid = ?", client.UID())
-	} else if client.HasName() {
-		q = q.Where("client_name = ?", client.Name())
-	} else {
-		return 0
-	}
-
-	if client.HasUser() {
-		q = q.Where("user_uid = ?", client.UserUID)
-	}
-
-	if !authMethod.IsDefault() {
-		q = q.Where("auth_method = ?", authMethod.String())
-	}
-
-	q = q.Order("created_at DESC").Limit(2147483648).Offset(limit)
-
-	found := Sessions{}
-
-	if err := q.Find(&found).Error; err != nil {
-		event.AuditErr([]string{"failed to fetch client sessions", "%s"}, err)
-		return deleted
-	}
-
-	for _, sess := range found {
-		if err := sess.Delete(); err != nil {
-			event.AuditErr([]string{sess.IP(), "session %s", "failed to delete", "%s"}, sess.RefID, err)
-		} else {
-			deleted++
-		}
-	}
-
-	return deleted
 }
 
 // SessionStatusUnauthorized returns a session with status unauthorized (401).
@@ -219,19 +142,25 @@ func (m *Session) AuthTokenType() string {
 // Regenerate (re-)initializes the session with a random auth token, ID, and RefID.
 func (m *Session) Regenerate() *Session {
 	if !rnd.IsSessionID(m.ID) {
-		// Do not delete the old session if no ID is set yet.
+		// Skip deleting existing session if session ID is not set (or invalid).
 	} else if err := m.Delete(); err != nil {
+		// Failed to delete existing session.
 		event.AuditErr([]string{m.IP(), "session %s", "failed to delete", "%s"}, m.RefID, err)
 	} else {
+		// Successfully deleted existing session.
 		event.AuditErr([]string{m.IP(), "session %s", "deleted"}, m.RefID)
 	}
 
-	generated := TimeStamp()
-
+	// Set new auth token and ref id.
 	m.SetAuthToken(rnd.AuthToken())
 	m.RefID = rnd.RefID(SessionPrefix)
-	m.CreatedAt = generated
-	m.UpdatedAt = generated
+
+	// Get current time.
+	now := Now()
+
+	// Set timestamps to now.
+	m.CreatedAt = now
+	m.UpdatedAt = now
 
 	return m
 }
@@ -247,7 +176,7 @@ func (m *Session) CacheDuration(d time.Duration) {
 
 // Cache caches the session with the default expiration duration.
 func (m *Session) Cache() {
-	m.CacheDuration(sessionCacheExpiration)
+	m.CacheDuration(SessionCacheDuration)
 }
 
 // ClearCache deletes the session from the cache.
@@ -319,7 +248,7 @@ func (m *Session) SetClient(c *Client) *Session {
 	}
 
 	m.client = c
-	m.ClientUID = c.UID()
+	m.ClientUID = c.GetUID()
 	m.ClientName = c.ClientName
 	m.AuthProvider = c.Provider().String()
 	m.AuthMethod = c.Method().String()
@@ -503,49 +432,13 @@ func (m *Session) AuthInfo() string {
 }
 
 // SetAuthID sets a custom authentication identifier.
-func (m *Session) SetAuthID(id string) *Session {
+func (m *Session) SetAuthID(id, issuer string) *Session {
 	if id == "" {
 		return m
 	}
 
-	m.AuthID = clean.Name(id)
-
-	return m
-}
-
-// Scope returns the authorization scope as a sanitized string.
-func (m *Session) Scope() string {
-	return clean.Scope(m.AuthScope)
-}
-
-// HasScope checks if the session has the given authorization scope.
-func (m *Session) HasScope(scope string) bool {
-	return list.ParseAttr(m.Scope()).Contains(scope)
-}
-
-// SetScope sets a custom authentication scope.
-func (m *Session) SetScope(scope string) *Session {
-	if scope == "" {
-		return m
-	}
-
-	m.AuthScope = clean.Scope(scope)
-
-	return m
-}
-
-// Method returns the authentication method.
-func (m *Session) Method() authn.MethodType {
-	return authn.Method(m.AuthMethod)
-}
-
-// SetMethod sets a custom authentication method.
-func (m *Session) SetMethod(method authn.MethodType) *Session {
-	if method == "" {
-		return m
-	}
-
-	m.AuthMethod = method.String()
+	m.AuthID = clean.Auth(id)
+	m.AuthIssuer = clean.Uri(issuer)
 
 	return m
 }
@@ -562,6 +455,102 @@ func (m *Session) SetProvider(provider authn.ProviderType) *Session {
 	}
 
 	m.AuthProvider = provider.String()
+
+	return m
+}
+
+// Method returns the authentication method.
+func (m *Session) Method() authn.MethodType {
+	return authn.Method(m.AuthMethod)
+}
+
+// Is2FA checks if 2-Factor Authentication (2FA) was used to log in.
+func (m *Session) Is2FA() bool {
+	return m.Method().Is(authn.Method2FA)
+}
+
+// SetMethod sets a custom authentication method.
+func (m *Session) SetMethod(method authn.MethodType) *Session {
+	if method == "" {
+		return m
+	}
+
+	m.AuthMethod = method.String()
+
+	return m
+}
+
+// Scope returns the authorization scope as a sanitized string.
+func (m *Session) Scope() string {
+	return clean.Scope(m.AuthScope)
+}
+
+// ValidateScope checks if the scope does not exclude access to specified resource.
+func (m *Session) ValidateScope(resource acl.Resource, perms acl.Permissions) bool {
+	// Get scope string.
+	scope := m.Scope()
+
+	// Skip detailed check and allow all if scope is "*".
+	if scope == list.All {
+		return true
+	}
+
+	// Skip resource check if scope includes all read operations.
+	if scope == acl.ScopeRead.String() {
+		return !acl.GrantScopeRead.DenyAny(perms)
+	}
+
+	// Parse scope to check for resources and permissions.
+	attr := list.ParseAttr(scope)
+
+	// Check if resource is within scope.
+	if granted := attr.Contains(resource.String()); !granted {
+		return false
+	}
+
+	// Check if permission is within scope.
+	if len(perms) == 0 {
+		return true
+	}
+
+	// Check if scope is limited to read or write operations.
+	if a := attr.Find(acl.ScopeRead.String()); a.Value == list.True && acl.GrantScopeRead.DenyAny(perms) {
+		return false
+	} else if a = attr.Find(acl.ScopeWrite.String()); a.Value == list.True && acl.GrantScopeWrite.DenyAny(perms) {
+		return false
+	}
+
+	return true
+}
+
+// InsufficientScope checks if the scope does not include access to specified resource.
+func (m *Session) InsufficientScope(resource acl.Resource, perms acl.Permissions) bool {
+	return !m.ValidateScope(resource, perms)
+}
+
+// SetScope sets a custom authentication scope.
+func (m *Session) SetScope(scope string) *Session {
+	if scope == "" {
+		return m
+	}
+
+	m.AuthScope = clean.Scope(scope)
+
+	return m
+}
+
+// AuthGrantType returns the session's grant type as authn.GrantType.
+func (m *Session) AuthGrantType() authn.GrantType {
+	return authn.Grant(m.GrantType)
+}
+
+// SetGrantType sets the session's grant type if no type has been set yet.
+func (m *Session) SetGrantType(t authn.GrantType) *Session {
+	if t.IsUndefined() || m.GrantType != "" {
+		return m
+	}
+
+	m.GrantType = t.String()
 
 	return m
 }
@@ -661,7 +650,7 @@ func (m *Session) SetData(data *SessionData) *Session {
 // SetContext sets the session request context.
 func (m *Session) SetContext(c *gin.Context) *Session {
 	if c == nil || m == nil {
-		return m
+		return &Session{}
 	}
 
 	// Set client ip address from request context.
@@ -683,7 +672,7 @@ func (m *Session) SetContext(c *gin.Context) *Session {
 // UpdateContext sets the session request context and updates the session entry in the database if it has changed.
 func (m *Session) UpdateContext(c *gin.Context) *Session {
 	if c == nil || m == nil {
-		return m
+		return &Session{}
 	}
 
 	changed := false
@@ -799,6 +788,17 @@ func (m *Session) RedeemToken(token string) (n int) {
 	}
 }
 
+// Expires sets an explicit expiration time.
+func (m *Session) Expires(t time.Time) *Session {
+	if t.IsZero() {
+		return m
+	}
+
+	m.SessExpires = t.Unix()
+
+	return m
+}
+
 // ExpiresAt returns the time when the session expires.
 func (m *Session) ExpiresAt() time.Time {
 	if m.SessExpires <= 0 {
@@ -814,7 +814,40 @@ func (m *Session) ExpiresIn() int64 {
 		return 0
 	}
 
-	return m.SessExpires - unix.Time()
+	return m.SessExpires - unix.Now()
+}
+
+// SetExpiresIn sets the session lifetime in seconds (-1 for infinite).
+func (m *Session) SetExpiresIn(expiresIn int64) *Session {
+	if expiresIn < 0 {
+		m.SessExpires = -1
+	} else if expiresIn > 0 {
+		m.SessExpires = unix.Now() + expiresIn
+	}
+
+	return m
+}
+
+// SetTimeout sets the session idle time in seconds (-1 for infinite).
+func (m *Session) SetTimeout(timeout int64) *Session {
+	if timeout < 0 {
+		m.SessTimeout = -1
+	} else if timeout > 0 {
+		m.SessTimeout = timeout
+	}
+
+	return m
+}
+
+// Expired checks if the session has expired.
+func (m *Session) Expired() bool {
+	if m.SessExpires <= 0 {
+		return m.TimedOut()
+	} else if at := m.ExpiresAt(); at.IsZero() {
+		return false
+	} else {
+		return at.Before(UTC())
+	}
 }
 
 // TimeoutAt returns the time at which the session will expire due to inactivity.
@@ -837,27 +870,29 @@ func (m *Session) TimedOut() bool {
 	}
 }
 
-// Expired checks if the session has expired.
-func (m *Session) Expired() bool {
-	if m.SessExpires <= 0 {
-		return m.TimedOut()
-	} else if at := m.ExpiresAt(); at.IsZero() {
-		return false
-	} else {
-		return at.Before(UTC())
-	}
-}
-
-// UpdateLastActive sets the last activity of the session to now.
-func (m *Session) UpdateLastActive() *Session {
-	if m.Invalid() {
+// UpdateLastActive sets the time of last activity to now and optionally also updates the auth_sessions table.
+func (m *Session) UpdateLastActive(save bool) *Session {
+	if m == nil {
+		return &Session{}
+	} else if m.Invalid() || m.ID == "" {
 		return m
 	}
 
-	m.LastActive = unix.Time()
+	// Set time of last activity to now (Unix timestamp).
+	m.LastActive = unix.Now()
 
-	if err := Db().Model(m).UpdateColumn("LastActive", m.LastActive).Error; err != nil {
-		event.AuditWarn([]string{m.IP(), "session %s", "failed to update last active time", "%s"}, m.RefID, err)
+	// Update activity timestamp of this session in the auth_sessions table.
+	if !save {
+		return m
+	} else if err := Db().Model(m).UpdateColumn("last_active", m.LastActive).Error; err != nil {
+		event.AuditWarn([]string{m.IP(), "session %s", "failed to update activity timestamp", "%s"}, m.RefID, err)
+	}
+
+	// Update the activity timestamp of the parent session, if any.
+	if m.Method().IsNot(authn.MethodSession) || m.AuthID == "" || m.AuthID == m.ID {
+		return m
+	} else if err := Db().Table(Session{}.TableName()).Where("id = ?", m.AuthID).UpdateColumn("last_active", m.LastActive).Error; err != nil {
+		event.AuditWarn([]string{m.IP(), "session %s", "failed to update activity timestamp of parent session", "%s"}, m.RefID, err)
 	}
 
 	return m
@@ -927,7 +962,7 @@ func (m *Session) SetClientIP(ip string) {
 
 	if m.LoginIP == "" {
 		m.LoginIP = ip
-		m.LoginAt = TimeStamp()
+		m.LoginAt = Now()
 	}
 
 	return
@@ -938,7 +973,7 @@ func (m *Session) IP() string {
 	if m.ClientIP != "" {
 		return m.ClientIP
 	} else {
-		return "0.0.0.0"
+		return UnknownIP
 	}
 }
 

@@ -31,6 +31,7 @@ ENV PHOTOPRISM_ARCH=$TARGETARCH \
     DEBIAN_FRONTEND="noninteractive" \
     TMPDIR="/tmp" \
     TF_CPP_MIN_LOG_LEVEL="0" \
+    MALLOC_ARENA_MAX="4" \
     GOPATH="/go" \
     GOBIN="/usr/local/bin" \
     GO111MODULE="on" \
@@ -53,7 +54,7 @@ RUN echo 'APT::Acquire::Retries "3";' > /etc/apt/apt.conf.d/80retries && \
         libc6 ca-certificates bash sudo nano avahi-utils jq lsof lshw libebml5 libgav1-bin libatomic1 \
         exiftool sqlite3 tzdata gpg make zip unzip wget curl rsync imagemagick libvips-dev rawtherapee \
         ffmpeg libffmpeg-nvenc-dev libswscale-dev libavfilter-extra libavformat-extra libavcodec-extra \
-        x264 x265 libde265-dev libaom3 libvpx7 libwebm1 libjpeg8 libmatroska7 libdvdread8 \
+        x264 x265 libde265-dev libaom-dev libvpx-dev libwebm-dev libjpeg-dev libmatroska-dev libdvdread-dev \
     && \
     apt-get -qq install \
         apt-utils pkg-config software-properties-common \

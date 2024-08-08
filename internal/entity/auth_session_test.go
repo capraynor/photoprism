@@ -5,15 +5,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/photoprism/photoprism/pkg/report"
-
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/photoprism/photoprism/internal/acl"
+	"github.com/photoprism/photoprism/internal/auth/acl"
 	"github.com/photoprism/photoprism/pkg/authn"
 	"github.com/photoprism/photoprism/pkg/header"
 	"github.com/photoprism/photoprism/pkg/rnd"
-	"github.com/photoprism/photoprism/pkg/unix"
+	"github.com/photoprism/photoprism/pkg/time/unix"
+	"github.com/photoprism/photoprism/pkg/txt/report"
 )
 
 func TestNewSession(t *testing.T) {
@@ -93,46 +93,6 @@ func TestSession_Expires(t *testing.T) {
 	})
 }
 
-func TestDeleteExpiredSessions(t *testing.T) {
-	assert.Equal(t, 0, DeleteExpiredSessions())
-	m := NewSession(unix.Day, unix.Hour)
-	m.Expires(time.Date(2000, 01, 15, 12, 30, 0, 0, time.UTC))
-	m.Save()
-	assert.Equal(t, 1, DeleteExpiredSessions())
-}
-
-func TestDeleteClientSessions(t *testing.T) {
-	// Test client UID.
-	clientUID := "cs5gfen1bgx00000"
-
-	// Create new test client.
-	client := NewClient()
-	client.ClientUID = clientUID
-
-	// Make sure no sessions exist yet and test missing arguments.
-	assert.Equal(t, 0, DeleteClientSessions(&Client{}, "", -1))
-	assert.Equal(t, 0, DeleteClientSessions(client, authn.MethodOAuth2, -1))
-	assert.Equal(t, 0, DeleteClientSessions(client, authn.MethodOAuth2, 0))
-	assert.Equal(t, 0, DeleteClientSessions(&Client{}, authn.MethodDefault, 0))
-
-	// Create 10 test client sessions.
-	for i := 0; i < 10; i++ {
-		sess := NewSession(3600, 0)
-		sess.SetClient(client)
-
-		if err := sess.Save(); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	// Check if the expected number of sessions is deleted until none are left.
-	assert.Equal(t, 0, DeleteClientSessions(client, authn.MethodOAuth2, -1))
-	assert.Equal(t, 0, DeleteClientSessions(client, authn.MethodOIDC, 1))
-	assert.Equal(t, 9, DeleteClientSessions(client, authn.MethodOAuth2, 1))
-	assert.Equal(t, 1, DeleteClientSessions(client, authn.MethodOAuth2, 0))
-	assert.Equal(t, 0, DeleteClientSessions(client, authn.MethodOAuth2, 0))
-}
-
 func TestSessionStatusUnauthorized(t *testing.T) {
 	m := SessionStatusUnauthorized()
 	assert.Equal(t, http.StatusUnauthorized, m.Status)
@@ -165,8 +125,12 @@ func TestFindSessionByRefID(t *testing.T) {
 func TestSession_Regenerate(t *testing.T) {
 	t.Run("NewSession", func(t *testing.T) {
 		m := NewSession(unix.Day, unix.Hour)
+		assert.Equal(t, int64(0), m.LastActive)
 		initialID := m.ID
+		m.UpdateLastActive(false)
+		assert.GreaterOrEqual(t, unix.Now(), m.LastActive)
 		m.Regenerate()
+		assert.Equal(t, int64(0), m.LastActive)
 		finalID := m.ID
 		assert.NotEqual(t, initialID, finalID)
 	})
@@ -230,7 +194,7 @@ func TestSession_Create(t *testing.T) {
 		s := &Session{
 			UserName:    "charles",
 			SessExpires: unix.Day * 3,
-			SessTimeout: unix.Time() + unix.Week,
+			SessTimeout: unix.Now() + unix.Week,
 			RefID:       "sessxkkcxxxx",
 		}
 
@@ -256,7 +220,7 @@ func TestSession_Create(t *testing.T) {
 		s := &Session{
 			UserName:    "charles",
 			SessExpires: unix.Day * 3,
-			SessTimeout: unix.Time() + unix.Week,
+			SessTimeout: unix.Now() + unix.Week,
 			RefID:       "123",
 		}
 
@@ -278,7 +242,7 @@ func TestSession_Create(t *testing.T) {
 		s := &Session{
 			UserName:    "charles",
 			SessExpires: unix.Day * 3,
-			SessTimeout: unix.Time() + unix.Week,
+			SessTimeout: unix.Now() + unix.Week,
 			RefID:       "sessxkkcxxxx",
 		}
 
@@ -296,7 +260,7 @@ func TestSession_Save(t *testing.T) {
 		s := &Session{
 			UserName:    "chris",
 			SessExpires: unix.Day * 3,
-			SessTimeout: unix.Time() + unix.Week,
+			SessTimeout: unix.Now() + unix.Week,
 			RefID:       "sessxkkcxxxy",
 		}
 
@@ -386,6 +350,28 @@ func TestSession_ClientRole(t *testing.T) {
 	})
 }
 
+func TestSession_ClientInfo(t *testing.T) {
+	t.Run("Alice", func(t *testing.T) {
+		m := SessionFixtures.Get("alice")
+		assert.Equal(t, "n/a", m.ClientInfo())
+	})
+	t.Run("Metrics", func(t *testing.T) {
+		m := SessionFixtures.Get("client_metrics")
+		assert.Equal(t, "cs5cpu17n6gj2qo5", m.ClientInfo())
+	})
+}
+
+func TestSession_NoClient(t *testing.T) {
+	t.Run("Alice", func(t *testing.T) {
+		m := SessionFixtures.Get("alice")
+		assert.True(t, m.NoClient())
+	})
+	t.Run("Metrics", func(t *testing.T) {
+		m := SessionFixtures.Get("client_metrics")
+		assert.False(t, m.NoClient())
+	})
+}
+
 func TestSession_SetClient(t *testing.T) {
 	t.Run("Alice", func(t *testing.T) {
 		m := SessionFixtures.Get("alice")
@@ -431,6 +417,17 @@ func TestSession_User(t *testing.T) {
 	t.Run("Default", func(t *testing.T) {
 		m := &Session{}
 		assert.Equal(t, "", m.User().UserUID)
+	})
+}
+
+func TestSession_UserInfo(t *testing.T) {
+	t.Run("Alice", func(t *testing.T) {
+		m := SessionFixtures.Get("alice")
+		assert.Equal(t, "alice", m.UserInfo())
+	})
+	t.Run("Metrics", func(t *testing.T) {
+		m := SessionFixtures.Get("client_metrics")
+		assert.Equal(t, "", m.UserInfo())
 	})
 }
 
@@ -482,7 +479,7 @@ func TestSession_AuthInfo(t *testing.T) {
 
 		i := m.AuthInfo()
 
-		assert.Equal(t, "Access Token (Personal)", i)
+		assert.Equal(t, "Access Token", i)
 	})
 }
 
@@ -494,9 +491,10 @@ func TestSession_SetAuthID(t *testing.T) {
 			AuthID:   "test-session-auth-id",
 		}
 
-		m := s.SetAuthID("")
+		m := s.SetAuthID("", "https://accounts.google.com")
 
 		assert.Equal(t, "test-session-auth-id", m.AuthID)
+		assert.Equal(t, "", m.AuthIssuer)
 	})
 	t.Run("New", func(t *testing.T) {
 		s := &Session{
@@ -505,34 +503,10 @@ func TestSession_SetAuthID(t *testing.T) {
 			AuthID:   "new-id",
 		}
 
-		m := s.SetAuthID("new-id")
+		m := s.SetAuthID("new-id", "https://accounts.google.com")
 
 		assert.Equal(t, "new-id", m.AuthID)
-	})
-}
-
-func TestSession_SetScope(t *testing.T) {
-	t.Run("EmptyScope", func(t *testing.T) {
-		s := &Session{
-			UserName:  "test",
-			RefID:     "sessxkkcxxxz",
-			AuthScope: "*",
-		}
-
-		m := s.SetScope("")
-
-		assert.Equal(t, "*", m.AuthScope)
-	})
-	t.Run("NewScope", func(t *testing.T) {
-		s := &Session{
-			UserName:  "test",
-			RefID:     "sessxkkcxxxz",
-			AuthScope: "*",
-		}
-
-		m := s.SetScope("Metrics")
-
-		assert.Equal(t, "metrics", m.AuthScope)
+		assert.Equal(t, "https://accounts.google.com", m.AuthIssuer)
 	})
 }
 
@@ -542,20 +516,20 @@ func TestSession_SetMethod(t *testing.T) {
 			UserName:     "test",
 			RefID:        "sessxkkcxxxz",
 			AuthProvider: authn.ProviderAccessToken.String(),
-			AuthMethod:   authn.MethodPersonal.String(),
+			AuthMethod:   authn.MethodDefault.String(),
 		}
 
 		m := s.SetMethod("")
 
 		assert.Equal(t, authn.ProviderAccessToken, m.Provider())
-		assert.Equal(t, authn.MethodPersonal, m.Method())
+		assert.Equal(t, authn.MethodDefault, m.Method())
 	})
 	t.Run("Test", func(t *testing.T) {
 		s := &Session{
 			UserName:     "test",
 			RefID:        "sessxkkcxxxz",
 			AuthProvider: authn.ProviderAccessToken.String(),
-			AuthMethod:   authn.MethodPersonal.String(),
+			AuthMethod:   authn.MethodDefault.String(),
 		}
 
 		m := s.SetMethod("Test")
@@ -568,13 +542,27 @@ func TestSession_SetMethod(t *testing.T) {
 			UserName:     "test",
 			RefID:        "sessxkkcxxxz",
 			AuthProvider: authn.ProviderAccessToken.String(),
-			AuthMethod:   authn.MethodPersonal.String(),
+			AuthMethod:   authn.MethodDefault.String(),
 		}
 
 		m := s.SetMethod(authn.MethodSession)
 
 		assert.Equal(t, authn.ProviderAccessToken, m.Provider())
 		assert.Equal(t, authn.MethodSession, m.Method())
+	})
+	t.Run("2FA", func(t *testing.T) {
+		s := &Session{
+			UserName:     "test",
+			RefID:        "sessxkkcxxxz",
+			AuthProvider: authn.ProviderAccessToken.String(),
+			AuthMethod:   authn.MethodDefault.String(),
+		}
+		s.Regenerate()
+		assert.False(t, s.Is2FA())
+		m := s.SetMethod(authn.Method2FA)
+		assert.True(t, s.Is2FA())
+		assert.True(t, m.Is2FA())
+		assert.Equal(t, m.ID, s.ID)
 	})
 }
 
@@ -608,6 +596,154 @@ func TestSession_ChangePassword(t *testing.T) {
 	if err2 != nil {
 		t.Fatal(err2)
 	}
+}
+
+func TestSession_ValidateScope(t *testing.T) {
+	t.Run("AnyScope", func(t *testing.T) {
+		s := &Session{
+			UserName:  "test",
+			RefID:     "sessxkkcxxxz",
+			AuthScope: "*",
+		}
+
+		assert.True(t, s.ValidateScope("", nil))
+	})
+	t.Run("ReadScope", func(t *testing.T) {
+		s := &Session{
+			UserName:  "test",
+			RefID:     "sessxkkcxxxz",
+			AuthScope: "read",
+		}
+
+		assert.True(t, s.ValidateScope("metrics", nil))
+		assert.True(t, s.ValidateScope("sessions", nil))
+		assert.True(t, s.ValidateScope("metrics", acl.Permissions{acl.ActionView, acl.AccessAll}))
+		assert.False(t, s.ValidateScope("metrics", acl.Permissions{acl.ActionUpdate}))
+		assert.False(t, s.ValidateScope("metrics", acl.Permissions{acl.ActionUpdate}))
+		assert.False(t, s.ValidateScope("settings", acl.Permissions{acl.ActionUpdate}))
+		assert.False(t, s.ValidateScope("settings", acl.Permissions{acl.ActionCreate}))
+		assert.False(t, s.ValidateScope("sessions", acl.Permissions{acl.ActionDelete}))
+	})
+	t.Run("ReadAny", func(t *testing.T) {
+		s := &Session{
+			UserName:  "test",
+			RefID:     "sessxkkcxxxz",
+			AuthScope: "read *",
+		}
+
+		assert.True(t, s.ValidateScope("metrics", nil))
+		assert.True(t, s.ValidateScope("sessions", nil))
+		assert.True(t, s.ValidateScope("metrics", acl.Permissions{acl.ActionView, acl.AccessAll}))
+		assert.False(t, s.ValidateScope("metrics", acl.Permissions{acl.ActionUpdate}))
+		assert.False(t, s.ValidateScope("metrics", acl.Permissions{acl.ActionUpdate}))
+		assert.False(t, s.ValidateScope("settings", acl.Permissions{acl.ActionUpdate}))
+		assert.False(t, s.ValidateScope("settings", acl.Permissions{acl.ActionCreate}))
+		assert.False(t, s.ValidateScope("sessions", acl.Permissions{acl.ActionDelete}))
+	})
+	t.Run("ReadSettings", func(t *testing.T) {
+		s := &Session{
+			UserName:  "test",
+			RefID:     "sessxkkcxxxz",
+			AuthScope: "read settings",
+		}
+
+		assert.True(t, s.ValidateScope("settings", acl.Permissions{acl.ActionView}))
+		assert.False(t, s.ValidateScope("metrics", nil))
+		assert.False(t, s.ValidateScope("sessions", nil))
+		assert.False(t, s.ValidateScope("metrics", acl.Permissions{acl.ActionView, acl.AccessAll}))
+		assert.False(t, s.ValidateScope("metrics", acl.Permissions{acl.ActionUpdate}))
+		assert.False(t, s.ValidateScope("metrics", acl.Permissions{acl.ActionUpdate}))
+		assert.False(t, s.ValidateScope("settings", acl.Permissions{acl.ActionUpdate}))
+		assert.False(t, s.ValidateScope("sessions", acl.Permissions{acl.ActionDelete}))
+		assert.False(t, s.ValidateScope("sessions", acl.Permissions{acl.ActionDelete}))
+	})
+}
+
+func TestSession_InsufficientScope(t *testing.T) {
+	t.Run("Empty", func(t *testing.T) {
+		s := &Session{
+			UserName:  "test",
+			RefID:     "sessxkkcxxxz",
+			AuthScope: "*",
+		}
+
+		assert.False(t, s.InsufficientScope("", nil))
+	})
+	t.Run("ReadSettings", func(t *testing.T) {
+		s := &Session{
+			UserName:  "test",
+			RefID:     "sessxkkcxxxz",
+			AuthScope: "read settings",
+		}
+
+		assert.False(t, s.InsufficientScope("settings", acl.Permissions{acl.ActionView}))
+		assert.True(t, s.InsufficientScope("metrics", nil))
+		assert.True(t, s.InsufficientScope("sessions", nil))
+		assert.True(t, s.InsufficientScope("metrics", acl.Permissions{acl.ActionView, acl.AccessAll}))
+		assert.True(t, s.InsufficientScope("metrics", acl.Permissions{acl.ActionUpdate}))
+		assert.True(t, s.InsufficientScope("metrics", acl.Permissions{acl.ActionUpdate}))
+		assert.True(t, s.InsufficientScope("settings", acl.Permissions{acl.ActionUpdate}))
+		assert.True(t, s.InsufficientScope("sessions", acl.Permissions{acl.ActionDelete}))
+		assert.True(t, s.InsufficientScope("sessions", acl.Permissions{acl.ActionDelete}))
+	})
+}
+
+func TestSession_SetScope(t *testing.T) {
+	t.Run("EmptyScope", func(t *testing.T) {
+		s := &Session{
+			UserName:  "test",
+			RefID:     "sessxkkcxxxz",
+			AuthScope: "*",
+		}
+
+		m := s.SetScope("")
+
+		assert.Equal(t, "*", m.AuthScope)
+	})
+	t.Run("NewScope", func(t *testing.T) {
+		s := &Session{
+			UserName:  "test",
+			RefID:     "sessxkkcxxxz",
+			AuthScope: "*",
+		}
+
+		m := s.SetScope("Metrics")
+
+		assert.Equal(t, "metrics", m.AuthScope)
+	})
+}
+
+func TestSession_SetGrantType(t *testing.T) {
+	t.Run("Password", func(t *testing.T) {
+		m := &Session{
+			UserName:  "test",
+			RefID:     "sessxkkcxxxz",
+			AuthScope: "*",
+		}
+
+		expected := "password"
+
+		m.SetGrantType(authn.GrantPassword)
+		assert.Equal(t, expected, m.GrantType)
+		m.SetGrantType(authn.GrantClientCredentials)
+		assert.Equal(t, expected, m.GrantType)
+		m.SetGrantType(authn.GrantUndefined)
+		assert.Equal(t, expected, m.GrantType)
+		assert.Equal(t, authn.GrantPassword, m.AuthGrantType())
+	})
+	t.Run("ClientCredentials", func(t *testing.T) {
+		client := ClientFixtures.Pointer("alice")
+		m := client.NewSession(&gin.Context{}, authn.GrantClientCredentials)
+
+		expected := "client_credentials"
+
+		assert.Equal(t, expected, m.GrantType)
+		m.SetGrantType(authn.GrantPassword)
+		assert.Equal(t, expected, m.GrantType)
+		m.SetGrantType(authn.GrantUndefined)
+		assert.Equal(t, expected, m.GrantType)
+		assert.Equal(t, authn.GrantClientCredentials, m.AuthGrantType())
+	})
 }
 
 func TestSession_SetPreviewToken(t *testing.T) {
@@ -772,7 +908,7 @@ func TestSession_TimedOut(t *testing.T) {
 	})
 	t.Run("TimedOut", func(t *testing.T) {
 		m := NewSession(unix.Day, unix.Hour)
-		utc := unix.Time()
+		utc := unix.Now()
 
 		m.LastActive = utc - (unix.Hour + 1)
 
@@ -781,12 +917,25 @@ func TestSession_TimedOut(t *testing.T) {
 	})
 	t.Run("NotTimedOut", func(t *testing.T) {
 		m := NewSession(unix.Day, unix.Hour)
-		utc := unix.Time()
+		utc := unix.Now()
 
 		m.LastActive = utc - (unix.Hour - 10)
 
 		assert.False(t, m.TimeoutAt().IsZero())
 		assert.False(t, m.TimedOut())
+	})
+}
+
+func TestSession_UpdateLastActive(t *testing.T) {
+	t.Run("NewSession", func(t *testing.T) {
+		m := NewSession(unix.Day, unix.Hour)
+		t.Logf("Timeout: %s, Expiration: %s", m.TimeoutAt().String(), m.ExpiresAt())
+
+		assert.Equal(t, int64(0), m.LastActive)
+
+		m.UpdateLastActive(false)
+
+		assert.GreaterOrEqual(t, unix.Now(), m.LastActive)
 	})
 }
 
@@ -818,7 +967,7 @@ func TestSession_Expired(t *testing.T) {
 	t.Run("Expired", func(t *testing.T) {
 		m := NewSession(unix.Day, unix.Hour)
 		t.Logf("Timeout: %s, Expiration: %s", m.TimeoutAt().String(), m.ExpiresAt())
-		utc := unix.Time()
+		utc := unix.Now()
 
 		m.SessExpires = utc - 10
 
@@ -830,7 +979,7 @@ func TestSession_Expired(t *testing.T) {
 	})
 	t.Run("NotExpired", func(t *testing.T) {
 		m := NewSession(unix.Day, unix.Hour)
-		utc := unix.Time()
+		utc := unix.Now()
 
 		m.SessExpires = utc + 10
 

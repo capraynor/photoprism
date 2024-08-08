@@ -3,9 +3,9 @@ package commands
 import (
 	"github.com/urfave/cli"
 
-	"github.com/photoprism/photoprism/internal/acl"
+	"github.com/photoprism/photoprism/internal/auth/acl"
 	"github.com/photoprism/photoprism/pkg/authn"
-	"github.com/photoprism/photoprism/pkg/unix"
+	"github.com/photoprism/photoprism/pkg/time/unix"
 )
 
 // Usage hints for the client management subcommands.
@@ -63,7 +63,7 @@ var ClientAddFlags = []cli.Flag{
 	cli.StringFlag{
 		Name:   "provider, p",
 		Usage:  ClientAuthProvider,
-		Value:  authn.ProviderClientCredentials.String(),
+		Value:  authn.ProviderClient.String(),
 		Hidden: true,
 	},
 	cli.StringFlag{
@@ -107,7 +107,7 @@ var ClientModFlags = []cli.Flag{
 	cli.StringFlag{
 		Name:   "provider, p",
 		Usage:  ClientAuthProvider,
-		Value:  authn.ProviderClientCredentials.String(),
+		Value:  authn.ProviderClient.String(),
 		Hidden: true,
 	},
 	cli.StringFlag{

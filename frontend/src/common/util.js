@@ -127,12 +127,7 @@ export default class Util {
   }
 
   static encodeHTML(text) {
-    return text
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#x27;");
+    return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#x27;");
   }
 
   static resetTimer() {
@@ -291,7 +286,11 @@ export default class Util {
       case "hvc1":
         return "High Efficiency Video Coding (HEVC) / H.265";
       case "vvc":
+      case "vvc1":
         return "Versatile Video Coding (VVC) / H.266";
+      case "evc":
+      case "evc1":
+        return "Essential Video Coding (MPEG-5 Part 1)";
       case "av1c":
       case "av01":
         return "AOMedia Video 1 (AV1)";
@@ -427,7 +426,7 @@ export default class Util {
       await window.navigator.clipboard.writeText(text);
     } else if (document.execCommand) {
       // Clipboard is available only in HTTPS pages. see https://web.dev/async-clipboard/
-      // So if the the official 'clipboard' doesn't supported and the 'document.execCommand' is supported.
+      // So if the official 'clipboard' doesn't supported and the 'document.execCommand' is supported.
       // copy by a work-around by creating a textarea in the DOM and execute copy command from him.
 
       // Create the text area element (to copy from)

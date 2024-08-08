@@ -1,9 +1,9 @@
 package entity
 
 import (
-	"github.com/photoprism/photoprism/internal/acl"
+	"github.com/photoprism/photoprism/internal/auth/acl"
 	"github.com/photoprism/photoprism/pkg/authn"
-	"github.com/photoprism/photoprism/pkg/unix"
+	"github.com/photoprism/photoprism/pkg/time/unix"
 )
 
 type ClientMap map[string]Client
@@ -35,7 +35,7 @@ var ClientFixtures = ClientMap{
 		ClientType:   authn.ClientConfidential,
 		ClientURL:    "",
 		CallbackURL:  "",
-		AuthProvider: authn.ProviderClientCredentials.String(),
+		AuthProvider: authn.ProviderClient.String(),
 		AuthMethod:   authn.MethodOAuth2.String(),
 		AuthScope:    "*",
 		AuthExpires:  unix.Day,
@@ -53,7 +53,7 @@ var ClientFixtures = ClientMap{
 		ClientType:   authn.ClientPublic,
 		ClientURL:    "",
 		CallbackURL:  "",
-		AuthProvider: authn.ProviderClientCredentials.String(),
+		AuthProvider: authn.ProviderClient.String(),
 		AuthMethod:   authn.MethodOAuth2.String(),
 		AuthScope:    "*",
 		AuthExpires:  0,
@@ -71,7 +71,7 @@ var ClientFixtures = ClientMap{
 		ClientType:   authn.ClientConfidential,
 		ClientURL:    "",
 		CallbackURL:  "",
-		AuthProvider: authn.ProviderClientCredentials.String(),
+		AuthProvider: authn.ProviderClient.String(),
 		AuthMethod:   authn.MethodOAuth2.String(),
 		AuthScope:    "metrics",
 		AuthExpires:  unix.Hour,
@@ -89,8 +89,8 @@ var ClientFixtures = ClientMap{
 		ClientType:   authn.ClientUnknown,
 		ClientURL:    "",
 		CallbackURL:  "",
-		AuthProvider: authn.ProviderClientCredentials.String(),
-		AuthMethod:   authn.MethodUnknown.String(),
+		AuthProvider: authn.ProviderClient.String(),
+		AuthMethod:   authn.MethodUndefined.String(),
 		AuthScope:    "*",
 		AuthExpires:  unix.Hour,
 		AuthTokens:   2,
@@ -107,7 +107,7 @@ var ClientFixtures = ClientMap{
 		ClientType:   authn.ClientConfidential,
 		ClientURL:    "",
 		CallbackURL:  "",
-		AuthProvider: authn.ProviderClientCredentials.String(),
+		AuthProvider: authn.ProviderClient.String(),
 		AuthMethod:   authn.MethodOAuth2.String(),
 		AuthScope:    "metrics",
 		AuthExpires:  unix.Hour,
@@ -125,9 +125,27 @@ var ClientFixtures = ClientMap{
 		ClientType:   authn.ClientConfidential,
 		ClientURL:    "",
 		CallbackURL:  "",
-		AuthProvider: authn.ProviderClientCredentials.String(),
+		AuthProvider: authn.ProviderClient.String(),
 		AuthMethod:   authn.MethodOAuth2.String(),
 		AuthScope:    "statistics",
+		AuthExpires:  unix.Hour,
+		AuthTokens:   2,
+		AuthEnabled:  true,
+		LastActive:   0,
+	},
+	"invalid_method": {
+		ClientUID:    "cs7pvt5h8rw9he34",
+		UserUID:      "",
+		UserName:     "",
+		user:         nil,
+		ClientName:   "Invalid",
+		ClientRole:   acl.RoleNone.String(),
+		ClientType:   authn.ClientUnknown,
+		ClientURL:    "",
+		CallbackURL:  "",
+		AuthProvider: authn.ProviderClient.String(),
+		AuthMethod:   "invalid",
+		AuthScope:    "*",
 		AuthExpires:  unix.Hour,
 		AuthTokens:   2,
 		AuthEnabled:  true,

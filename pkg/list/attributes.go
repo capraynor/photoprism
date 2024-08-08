@@ -26,6 +26,11 @@ func ParseAttr(s string) Attr {
 
 // String returns the attributes as string.
 func (list Attr) String() string {
+	return strings.Join(list.Strings(), " ")
+}
+
+// Strings returns the attributes as string slice.
+func (list Attr) Strings() []string {
 	result := make([]string, 0, len(list))
 
 	list.Sort()
@@ -55,49 +60,76 @@ func (list Attr) String() string {
 		i++
 	}
 
-	return strings.Join(result, " ")
+	return result
 }
 
 // Sort sorts the attributes by key.
-func (list Attr) Sort() {
+func (list Attr) Sort() Attr {
 	sort.Slice(list, func(i, j int) bool {
 		if list[i].Key == list[j].Key {
 			return list[i].Value < list[j].Value
+		} else if list[i].Key == All {
+			return false
+		} else if list[j].Key == All {
+			return true
 		} else {
 			return list[i].Key < list[j].Key
 		}
 	})
+
+	return list
 }
 
 // Contains tests if the list contains the attribute provided as string.
 func (list Attr) Contains(s string) bool {
-	if len(list) == 0 || s == "" {
+	attr := list.Find(s)
+
+	if attr.Key == "" || attr.Value == False {
 		return false
+	}
+
+	return true
+}
+
+// Find returns the matching KeyValue attribute if found.
+func (list Attr) Find(s string) (a KeyValue) {
+	if len(list) == 0 || s == "" {
+		return a
 	} else if s == All {
-		return true
+		return KeyValue{Key: All, Value: ""}
 	}
 
 	attr := ParseKeyValue(s)
 
-	// Abort if attribute is invalid.
+	// Return nil if key is invalid or all.
 	if attr.Key == "" {
-		return false
+		return a
 	}
 
-	// Find matches.
+	// Find and return first match.
 	if attr.Value == "" || attr.Value == All {
 		for i := range list {
-			if strings.EqualFold(attr.Key, list[i].Key) || list[i].Key == All {
-				return true
+			if strings.EqualFold(attr.Key, list[i].Key) {
+				return *list[i]
+			} else if list[i].Key == All {
+				a = *list[i]
 			}
 		}
 	} else {
 		for i := range list {
-			if strings.EqualFold(attr.Key, list[i].Key) && (attr.Value == list[i].Value || list[i].Value == All) || list[i].Key == All {
-				return true
+			if strings.EqualFold(attr.Key, list[i].Key) {
+				if attr.Value == True && list[i].Value == False {
+					return KeyValue{Key: "", Value: ""}
+				} else if attr.Value == list[i].Value {
+					return *list[i]
+				} else if list[i].Value == All {
+					a = *list[i]
+				}
+			} else if list[i].Key == All && attr.Value != False {
+				a = *list[i]
 			}
 		}
 	}
 
-	return false
+	return a
 }

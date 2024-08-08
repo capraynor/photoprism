@@ -25,8 +25,8 @@ func TestUserShares_Contains(t *testing.T) {
 }
 
 func TestNewUserShare(t *testing.T) {
-	expires := TimeStamp().Add(time.Hour * 48)
-	m := NewUserShare(Admin.UID(), AlbumFixtures.Get("berlin-2019").AlbumUID, PermReact, &expires)
+	expires := Now().Add(time.Hour * 48)
+	m := NewUserShare(Admin.GetUID(), AlbumFixtures.Get("berlin-2019").AlbumUID, PermReact, &expires)
 
 	assert.True(t, m.HasID())
 	assert.True(t, rnd.IsRefID(m.RefID))
@@ -76,7 +76,7 @@ func TestFindUserShare(t *testing.T) {
 
 func TestFindUserShares(t *testing.T) {
 	t.Run("Alice", func(t *testing.T) {
-		found := FindUserShares(UserFixtures.Pointer("alice").UID())
+		found := FindUserShares(UserFixtures.Pointer("alice").GetUID())
 		assert.NotNil(t, found)
 		assert.Len(t, found, 1)
 

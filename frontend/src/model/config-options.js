@@ -36,6 +36,12 @@ export class ConfigOptions extends Model {
       OriginalsLimit: 0,
       Workers: 0,
       WakeupInterval: 0,
+      BackupAlbums: true,
+      BackupDatabase: true,
+      BackupSchedule: "",
+      BackupRetain: 3,
+      SidecarYaml: true,
+      DisableRestart: true,
       DisableWebDAV: config.values.disable.webdav,
       DisableSettings: config.values.disable.settings,
       DisablePlaces: config.values.disable.places,
@@ -55,6 +61,8 @@ export class ConfigOptions extends Model {
       UploadNSFW: config.values.uploadNSFW,
       RawPresets: false,
       ThumbUncached: true,
+      ThumbLibrary: "",
+      ThumbColor: "",
       ThumbFilter: "",
       ThumbSize: 0,
       ThumbSizeUncached: 0,
@@ -85,9 +93,7 @@ export class ConfigOptions extends Model {
   }
 
   save() {
-    return Api.post("config/options", this.getValues(true)).then((response) =>
-      Promise.resolve(this.setValues(response.data))
-    );
+    return Api.post("config/options", this.getValues(true)).then((response) => Promise.resolve(this.setValues(response.data)));
   }
 }
 

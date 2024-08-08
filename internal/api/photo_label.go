@@ -6,12 +6,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/photoprism/photoprism/internal/acl"
-	"github.com/photoprism/photoprism/internal/classify"
+	"github.com/photoprism/photoprism/internal/ai/classify"
+	"github.com/photoprism/photoprism/internal/auth/acl"
 	"github.com/photoprism/photoprism/internal/entity"
+	"github.com/photoprism/photoprism/internal/entity/query"
 	"github.com/photoprism/photoprism/internal/event"
 	"github.com/photoprism/photoprism/internal/form"
-	"github.com/photoprism/photoprism/internal/query"
 	"github.com/photoprism/photoprism/pkg/clean"
 	"github.com/photoprism/photoprism/pkg/txt"
 )
@@ -22,7 +22,8 @@ import (
 //
 //   - uid: string PhotoUID as returned by the API
 //
-// POST /api/v1/photos/:uid/label
+//     @Tags	Photos
+//     @Router	/api/v1/photos/{uid}/label [post]
 func AddPhotoLabel(router *gin.RouterGroup) {
 	router.POST("/photos/:uid/label", func(c *gin.Context) {
 		s := Auth(c, acl.ResourcePhotos, acl.ActionUpdate)
@@ -40,6 +41,7 @@ func AddPhotoLabel(router *gin.RouterGroup) {
 
 		var f form.Label
 
+		// Assign and validate request form values.
 		if err = c.BindJSON(&f); err != nil {
 			AbortBadRequest(c)
 			return
@@ -48,7 +50,7 @@ func AddPhotoLabel(router *gin.RouterGroup) {
 		labelEntity := entity.FirstOrCreateLabel(entity.NewLabel(f.LabelName, f.LabelPriority))
 
 		if labelEntity == nil {
-			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "failed creating label"})
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "failed to create label"})
 			return
 		}
 
@@ -60,7 +62,7 @@ func AddPhotoLabel(router *gin.RouterGroup) {
 		photoLabel := entity.FirstOrCreatePhotoLabel(entity.NewPhotoLabel(m.ID, labelEntity.ID, f.Uncertainty, "manual"))
 
 		if photoLabel == nil {
-			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "failed updating photo label"})
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "failed to update photo label"})
 			return
 		}
 

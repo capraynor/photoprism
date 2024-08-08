@@ -4,12 +4,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/photoprism/photoprism/internal/acl"
-	"github.com/photoprism/photoprism/internal/customize"
+	"github.com/photoprism/photoprism/internal/auth/acl"
+	"github.com/photoprism/photoprism/internal/config/customize"
 	"github.com/photoprism/photoprism/internal/entity"
-	"github.com/photoprism/photoprism/internal/query"
-	"github.com/photoprism/photoprism/pkg/colors"
+	"github.com/photoprism/photoprism/internal/entity/query"
 	"github.com/photoprism/photoprism/pkg/env"
+	"github.com/photoprism/photoprism/pkg/media/colors"
 	"github.com/photoprism/photoprism/pkg/txt"
 )
 
@@ -110,6 +110,7 @@ type Years []int
 
 // ClientDisable represents disabled client features a user cannot turn back on.
 type ClientDisable struct {
+	Restart        bool `json:"restart"`
 	WebDAV         bool `json:"webdav"`
 	Settings       bool `json:"settings"`
 	Places         bool `json:"places"`
@@ -117,9 +118,10 @@ type ClientDisable struct {
 	TensorFlow     bool `json:"tensorflow"`
 	Faces          bool `json:"faces"`
 	Classification bool `json:"classification"`
-	Sips           bool `json:"sips"`
 	FFmpeg         bool `json:"ffmpeg"`
 	ExifTool       bool `json:"exiftool"`
+	Vips           bool `json:"vips"`
+	Sips           bool `json:"sips"`
 	Darktable      bool `json:"darktable"`
 	RawTherapee    bool `json:"rawtherapee"`
 	ImageMagick    bool `json:"imagemagick"`
@@ -221,15 +223,16 @@ func (c *Config) Flags() (flags []string) {
 // ClientPublic returns config values for use by the JavaScript UI and other clients.
 func (c *Config) ClientPublic() ClientConfig {
 	if c.Public() {
-		return c.ClientUser(true).ApplyACL(acl.Resources, acl.RoleAdmin)
+		return c.ClientUser(true).ApplyACL(acl.Rules, acl.RoleAdmin)
 	}
 
 	a := c.ClientAssets()
 
 	cfg := ClientConfig{
 		Settings: c.PublicSettings(),
-		ACL:      acl.Resources.Grants(acl.RoleNone),
+		ACL:      acl.Rules.Grants(acl.RoleNone),
 		Disable: ClientDisable{
+			Restart:        true,
 			WebDAV:         true,
 			Settings:       c.DisableSettings(),
 			Places:         c.DisablePlaces(),
@@ -317,8 +320,9 @@ func (c *Config) ClientShare() ClientConfig {
 
 	cfg := ClientConfig{
 		Settings: c.ShareSettings(),
-		ACL:      acl.Resources.Grants(acl.RoleVisitor),
+		ACL:      acl.Rules.Grants(acl.RoleVisitor),
 		Disable: ClientDisable{
+			Restart:        true,
 			WebDAV:         c.DisableWebDAV(),
 			Settings:       c.DisableSettings(),
 			Places:         c.DisablePlaces(),
@@ -414,16 +418,18 @@ func (c *Config) ClientUser(withSettings bool) ClientConfig {
 	cfg := ClientConfig{
 		Settings: s,
 		Disable: ClientDisable{
-			WebDAV:         c.DisableWebDAV(),
 			Settings:       c.DisableSettings(),
-			Places:         c.DisablePlaces(),
 			Backups:        c.DisableBackups(),
+			Restart:        c.DisableRestart(),
+			WebDAV:         c.DisableWebDAV(),
+			Places:         c.DisablePlaces(),
 			TensorFlow:     c.DisableTensorFlow(),
 			Faces:          c.DisableFaces(),
 			Classification: c.DisableClassification(),
-			Sips:           c.DisableSips(),
 			FFmpeg:         c.DisableFFmpeg(),
 			ExifTool:       c.DisableExifTool(),
+			Vips:           c.DisableVips(),
+			Sips:           c.DisableSips(),
 			Darktable:      c.DisableDarktable(),
 			RawTherapee:    c.DisableRawTherapee(),
 			ImageMagick:    c.DisableImageMagick(),
@@ -677,18 +683,18 @@ func (c *Config) ClientUser(withSettings bool) ClientConfig {
 
 // ClientRole provides the client config values for the specified user role.
 func (c *Config) ClientRole(role acl.Role) ClientConfig {
-	return c.ClientUser(true).ApplyACL(acl.Resources, role)
+	return c.ClientUser(true).ApplyACL(acl.Rules, role)
 }
 
 // ClientSession provides the client config values for the specified session.
 func (c *Config) ClientSession(sess *entity.Session) (cfg ClientConfig) {
 	if sess.NoUser() && sess.IsClient() {
-		cfg = c.ClientUser(false).ApplyACL(acl.Resources, sess.ClientRole())
+		cfg = c.ClientUser(false).ApplyACL(acl.Rules, sess.ClientRole())
 		cfg.Settings = c.SessionSettings(sess)
 	} else if sess.User().IsVisitor() {
 		cfg = c.ClientShare()
 	} else if sess.User().IsRegistered() {
-		cfg = c.ClientUser(false).ApplyACL(acl.Resources, sess.UserRole())
+		cfg = c.ClientUser(false).ApplyACL(acl.Rules, sess.UserRole())
 		cfg.Settings = c.SessionSettings(sess)
 	} else {
 		cfg = c.ClientPublic()

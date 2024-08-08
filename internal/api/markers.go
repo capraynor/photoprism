@@ -6,20 +6,19 @@ import (
 	"strings"
 	"time"
 
-	"github.com/photoprism/photoprism/pkg/clean"
-
 	"github.com/dustin/go-humanize/english"
 	"github.com/gin-gonic/gin"
 
-	"github.com/photoprism/photoprism/internal/acl"
-	"github.com/photoprism/photoprism/internal/crop"
+	"github.com/photoprism/photoprism/internal/auth/acl"
 	"github.com/photoprism/photoprism/internal/entity"
+	"github.com/photoprism/photoprism/internal/entity/query"
 	"github.com/photoprism/photoprism/internal/event"
 	"github.com/photoprism/photoprism/internal/form"
-	"github.com/photoprism/photoprism/internal/get"
-	"github.com/photoprism/photoprism/internal/i18n"
 	"github.com/photoprism/photoprism/internal/mutex"
-	"github.com/photoprism/photoprism/internal/query"
+	"github.com/photoprism/photoprism/internal/photoprism/get"
+	"github.com/photoprism/photoprism/internal/thumb/crop"
+	"github.com/photoprism/photoprism/pkg/clean"
+	"github.com/photoprism/photoprism/pkg/i18n"
 )
 
 // Checks if background worker runs less than once per hour.
@@ -76,7 +75,8 @@ func findFileMarker(c *gin.Context) (file *entity.File, marker *entity.Marker, e
 //
 // See internal/form/marker.go for the values required to create a new marker.
 //
-// POST /api/v1/markers
+//	@Tags Files
+//	@Router	/api/v1/markers [post]
 func CreateMarker(router *gin.RouterGroup) {
 	router.POST("/markers", func(c *gin.Context) {
 		s := Auth(c, acl.ResourceFiles, acl.ActionUpdate)
@@ -143,11 +143,11 @@ func CreateMarker(router *gin.RouterGroup) {
 			AbortSaveFailed(c)
 			return
 		} else if changed {
-			if updateErr := query.UpdateSubjectCovers(); updateErr != nil {
+			if updateErr := query.UpdateSubjectCovers(true); updateErr != nil {
 				log.Errorf("faces: %s (update covers)", updateErr)
 			}
 
-			if updateErr := entity.UpdateSubjectCounts(); updateErr != nil {
+			if updateErr := entity.UpdateSubjectCounts(true); updateErr != nil {
 				log.Errorf("faces: %s (update counts)", updateErr)
 			}
 		}
@@ -235,11 +235,11 @@ func UpdateMarker(router *gin.RouterGroup) {
 				}
 			}
 
-			if updateErr := query.UpdateSubjectCovers(); updateErr != nil {
+			if updateErr := query.UpdateSubjectCovers(true); updateErr != nil {
 				log.Errorf("faces: %s (update covers)", updateErr)
 			}
 
-			if updateErr := entity.UpdateSubjectCounts(); updateErr != nil {
+			if updateErr := entity.UpdateSubjectCounts(true); updateErr != nil {
 				log.Errorf("faces: %s (update counts)", updateErr)
 			}
 		}
@@ -299,9 +299,9 @@ func ClearMarkerSubject(router *gin.RouterGroup) {
 			log.Errorf("faces: %s (clear marker subject)", err)
 			AbortSaveFailed(c)
 			return
-		} else if err := query.UpdateSubjectCovers(); err != nil {
+		} else if err := query.UpdateSubjectCovers(true); err != nil {
 			log.Errorf("faces: %s (update covers)", err)
-		} else if err := entity.UpdateSubjectCounts(); err != nil {
+		} else if err := entity.UpdateSubjectCounts(true); err != nil {
 			log.Errorf("faces: %s (update counts)", err)
 		}
 

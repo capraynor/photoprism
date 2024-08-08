@@ -7,8 +7,8 @@ import (
 	"github.com/urfave/cli"
 
 	"github.com/photoprism/photoprism/internal/config"
-	"github.com/photoprism/photoprism/internal/query"
-	"github.com/photoprism/photoprism/pkg/report"
+	"github.com/photoprism/photoprism/internal/entity/query"
+	"github.com/photoprism/photoprism/pkg/txt/report"
 )
 
 // UsersListCommand configures the command name, flags, and action.
@@ -48,10 +48,10 @@ func usersListAction(ctx *cli.Context) error {
 		// Display report.
 		for i, user := range users {
 			rows[i] = []string{
-				user.UID(),
+				user.GetUID(),
 				user.Username(),
 				user.AclRole().Pretty(),
-				user.Provider().Pretty(),
+				user.AuthInfo(),
 				report.Bool(user.SuperAdmin, report.Yes, report.No),
 				report.Bool(user.CanLogIn(), report.Enabled, report.Disabled),
 				report.DateTime(user.LoginAt),

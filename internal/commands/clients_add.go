@@ -12,8 +12,8 @@ import (
 	"github.com/photoprism/photoprism/internal/form"
 	"github.com/photoprism/photoprism/pkg/clean"
 	"github.com/photoprism/photoprism/pkg/list"
-	"github.com/photoprism/photoprism/pkg/report"
 	"github.com/photoprism/photoprism/pkg/rnd"
+	"github.com/photoprism/photoprism/pkg/txt/report"
 )
 
 // ClientsAddCommand configures the command name, flags, and action.
@@ -100,7 +100,7 @@ func clientsAddAction(ctx *cli.Context) error {
 			}
 
 			rows[0] = []string{
-				client.UID(),
+				client.GetUID(),
 				client.Name(),
 				client.AuthInfo(),
 				client.UserInfo(),

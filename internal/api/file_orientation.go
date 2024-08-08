@@ -5,13 +5,13 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/photoprism/photoprism/internal/acl"
+	"github.com/photoprism/photoprism/internal/auth/acl"
+	"github.com/photoprism/photoprism/internal/entity/query"
 	"github.com/photoprism/photoprism/internal/form"
-	"github.com/photoprism/photoprism/internal/get"
-	"github.com/photoprism/photoprism/internal/i18n"
 	"github.com/photoprism/photoprism/internal/photoprism"
-	"github.com/photoprism/photoprism/internal/query"
+	"github.com/photoprism/photoprism/internal/photoprism/get"
 	"github.com/photoprism/photoprism/pkg/clean"
+	"github.com/photoprism/photoprism/pkg/i18n"
 )
 
 // ChangeFileOrientation changes the orientation of a file.
@@ -60,7 +60,7 @@ func ChangeFileOrientation(router *gin.RouterGroup) {
 			return
 		}
 
-		// Update form with values from request
+		// Assign and validate request form values.
 		if err = c.BindJSON(&f); err != nil {
 			Abort(c, http.StatusBadRequest, i18n.ErrBadRequest)
 			return

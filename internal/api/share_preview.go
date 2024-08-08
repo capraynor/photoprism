@@ -12,13 +12,13 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/photoprism/photoprism/internal/entity"
+	"github.com/photoprism/photoprism/internal/entity/query"
+	"github.com/photoprism/photoprism/internal/entity/search"
 	"github.com/photoprism/photoprism/internal/form"
-	"github.com/photoprism/photoprism/internal/frame"
-	"github.com/photoprism/photoprism/internal/get"
 	"github.com/photoprism/photoprism/internal/photoprism"
-	"github.com/photoprism/photoprism/internal/query"
-	"github.com/photoprism/photoprism/internal/search"
+	"github.com/photoprism/photoprism/internal/photoprism/get"
 	"github.com/photoprism/photoprism/internal/thumb"
+	"github.com/photoprism/photoprism/internal/thumb/frame"
 	"github.com/photoprism/photoprism/pkg/clean"
 	"github.com/photoprism/photoprism/pkg/fs"
 )
@@ -51,7 +51,7 @@ func SharePreview(router *gin.RouterGroup) {
 
 		previewFilename := filepath.Join(thumbPath, shared+fs.ExtJPEG)
 
-		expires := entity.TimeStamp().Add(-1 * time.Hour)
+		expires := entity.Now().Add(-1 * time.Hour)
 
 		if info, err := os.Stat(previewFilename); err != nil {
 			log.Debugf("share: creating new preview for %s", clean.Log(shared))
@@ -145,7 +145,7 @@ func SharePreview(router *gin.RouterGroup) {
 		preview = imaging.Resize(preview, 1200, 0, imaging.Lanczos)
 
 		// Save the resulting album preview as JPEG.
-		err = imaging.Save(preview, previewFilename, thumb.JpegQualitySmall.EncodeOption())
+		err = imaging.Save(preview, previewFilename, thumb.JpegQualitySmall().EncodeOption())
 
 		if err != nil {
 			log.Error(err)

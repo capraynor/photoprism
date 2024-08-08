@@ -1,6 +1,7 @@
 package entity
 
 import (
+	"errors"
 	"fmt"
 	"net/mail"
 	"path"
@@ -9,8 +10,9 @@ import (
 
 	"github.com/jinzhu/gorm"
 	"github.com/ulule/deepcopier"
+	"github.com/zitadel/oidc/v3/pkg/oidc"
 
-	"github.com/photoprism/photoprism/internal/acl"
+	"github.com/photoprism/photoprism/internal/auth/acl"
 	"github.com/photoprism/photoprism/internal/event"
 	"github.com/photoprism/photoprism/internal/form"
 	"github.com/photoprism/photoprism/pkg/authn"
@@ -48,6 +50,7 @@ type User struct {
 	UserUID       string        `gorm:"type:VARBINARY(42);column:user_uid;unique_index;" json:"UID" yaml:"UID"`
 	AuthProvider  string        `gorm:"type:VARBINARY(128);default:'';" json:"AuthProvider" yaml:"AuthProvider,omitempty"`
 	AuthMethod    string        `gorm:"type:VARBINARY(128);default:'';" json:"AuthMethod" yaml:"AuthMethod,omitempty"`
+	AuthIssuer    string        `gorm:"type:VARBINARY(255);default:'';" json:"AuthIssuer,omitempty" yaml:"AuthIssuer,omitempty"`
 	AuthID        string        `gorm:"type:VARBINARY(255);index;default:'';" json:"AuthID" yaml:"AuthID,omitempty"`
 	UserName      string        `gorm:"size:200;index;" json:"Name" yaml:"Name,omitempty"`
 	DisplayName   string        `gorm:"size:200;" json:"DisplayName" yaml:"DisplayName,omitempty"`
@@ -102,7 +105,25 @@ func NewUser() (m *User) {
 	}
 }
 
-// LdapUser creates an LDAP user entity.
+// OidcUser creates a new OIDC user entity.
+func OidcUser(userInfo *oidc.UserInfo, issuer, userName string) User {
+	authId := clean.Auth(userInfo.Subject)
+
+	if authId == "" {
+		return User{}
+	}
+
+	return User{
+		UserName:     userName,
+		DisplayName:  userInfo.Name,
+		UserEmail:    clean.Email(userInfo.Email),
+		AuthProvider: authn.ProviderOIDC.String(),
+		AuthIssuer:   clean.Uri(issuer),
+		AuthID:       authId,
+	}
+}
+
+// LdapUser creates a new LDAP user entity.
 func LdapUser(username, dn string) User {
 	return User{
 		UserName:     clean.Username(username),
@@ -121,8 +142,14 @@ func FindUser(find User) *User {
 		stmt = stmt.Where("id = ? OR user_name = ?", find.ID, find.UserName)
 	} else if find.ID != 0 {
 		stmt = stmt.Where("id = ?", find.ID)
-	} else if rnd.IsUID(find.UserUID, UserUID) {
+	} else if find.HasUID() {
 		stmt = stmt.Where("user_uid = ?", find.UserUID)
+	} else if authn.ProviderOIDC.Equal(find.AuthProvider) && find.AuthID != "" {
+		if find.AuthIssuer == "" {
+			stmt = stmt.Where("auth_provider = ? AND auth_id = ?", find.AuthProvider, find.AuthID)
+		} else {
+			stmt = stmt.Where("auth_provider = ? AND (auth_issuer = '' OR auth_issuer = ?) AND auth_id = ?", find.AuthProvider, find.AuthIssuer, find.AuthID)
+		}
 	} else if find.AuthProvider != "" && find.AuthID != "" && find.UserName != "" {
 		stmt = stmt.Where("auth_provider = ? AND auth_id = ? OR user_name = ?", find.AuthProvider, find.AuthID, find.UserName)
 	} else if find.UserName != "" {
@@ -202,13 +229,23 @@ func FindUserByUID(uid string) *User {
 	return FindUser(User{UserUID: uid})
 }
 
-// UID returns the unique id as string.
-func (m *User) UID() string {
+// GetUID returns the unique id as string.
+func (m *User) GetUID() string {
 	if m == nil {
 		return ""
 	}
 
 	return m.UserUID
+}
+
+// HasUID tests if the user has a valid uid.
+func (m *User) HasUID() bool {
+	return rnd.IsUID(m.UserUID, UserUID)
+}
+
+// InvalidUID tests if the user does not have a valid uid.
+func (m *User) InvalidUID() bool {
+	return !m.HasUID()
 }
 
 // SameUID checks if the given uid matches the own uid.
@@ -387,7 +424,7 @@ func (m *User) UpdateLoginTime() *time.Time {
 		return nil
 	}
 
-	timeStamp := TimePointer()
+	timeStamp := TimeStamp()
 
 	if err := Db().Model(m).UpdateColumn("LoginAt", timeStamp).Error; err != nil {
 		return nil
@@ -409,7 +446,7 @@ func (m *User) CanLogIn() bool {
 	} else if m.IsDisabled() || m.IsUnknown() || !m.IsRegistered() {
 		return false
 	} else {
-		return acl.Resources.Allow(acl.ResourceConfig, m.AclRole(), acl.AccessOwn)
+		return acl.Rules.Allow(acl.ResourceConfig, m.AclRole(), acl.AccessOwn)
 	}
 }
 
@@ -424,7 +461,7 @@ func (m *User) CanUseWebDAV() bool {
 		return false
 	} else {
 		// Check if the ACL allows downloading files via WebDAV based on the user role.
-		return acl.Resources.Allow(acl.ResourceWebDAV, m.AclRole(), acl.ActionDownload)
+		return acl.Rules.Allow(acl.ResourceWebDAV, m.AclRole(), acl.ActionDownload)
 	}
 }
 
@@ -438,7 +475,7 @@ func (m *User) CanUpload() bool {
 		return false
 	} else {
 		// Check if the ACL allows uploading photos based on the user role.
-		return acl.Resources.Allow(acl.ResourcePhotos, m.AclRole(), acl.ActionUpload)
+		return acl.Rules.Allow(acl.ResourcePhotos, m.AclRole(), acl.ActionUpload)
 	}
 }
 
@@ -531,18 +568,105 @@ func (m *User) Provider() authn.ProviderType {
 
 // HasProvider checks if the user has the given auth provider.
 func (m *User) HasProvider(t authn.ProviderType) bool {
-	return t.String() == m.Provider().String()
+	return m.Provider().Is(t)
 }
 
 // SetProvider set the authentication provider.
 func (m *User) SetProvider(t authn.ProviderType) *User {
 	if m == nil {
 		return nil
+	} else if t == "" {
+		return m
 	}
 
 	m.AuthProvider = t.String()
 
+	if !m.Provider().SupportsPasscodeAuthentication() && m.Method().Is(authn.Method2FA) {
+		m.AuthMethod = ""
+	}
+
 	return m
+}
+
+// Method returns the authentication method.
+func (m *User) Method() authn.MethodType {
+	return authn.Method(m.AuthMethod)
+}
+
+// SetMethod sets a custom authentication method.
+func (m *User) SetMethod(method authn.MethodType) *User {
+	if m == nil {
+		return nil
+	} else if method == "" {
+		return m
+	}
+
+	// It must not be possible to activate 2FA if the authentication provider does not support passcodes.
+	if !m.Provider().SupportsPasscodeAuthentication() && method.Is(authn.Method2FA) {
+		return m
+	}
+
+	m.AuthMethod = method.String()
+
+	return m
+}
+
+// SetAuthID sets a custom authentication identifier.
+func (m *User) SetAuthID(id, issuer string) *User {
+	// Update auth id if not empty.
+	if authId := clean.Auth(id); authId == "" {
+		return m
+	} else {
+		m.AuthID = authId
+		m.AuthIssuer = clean.Uri(issuer)
+	}
+
+	// Make sure other users do not use the same identifier.
+	if m.HasUID() && m.AuthProvider != "" {
+		if err := UnscopedDb().Model(&User{}).
+			Where("user_uid <> ? AND auth_provider = ? AND auth_id = ? AND super_admin = 0", m.UserUID, m.AuthProvider, m.AuthID).
+			Updates(map[string]interface{}{"auth_id": "", "auth_provider": authn.ProviderNone}).Error; err != nil {
+			event.AuditErr([]string{"user %s", "failed to resolve auth id conflicts", "%s"}, m.RefID, err)
+		}
+	}
+
+	return m
+}
+
+// UpdateAuthID updated the custom authentication identifier.
+func (m *User) UpdateAuthID(id, issuer string) error {
+	if m.InvalidUID() {
+		return errors.New("invalid user uid")
+	}
+
+	// Update auth id and issuer record.
+	return m.SetAuthID(id, issuer).Updates(Map{
+		"AuthID":     m.AuthID,
+		"AuthIssuer": m.AuthIssuer,
+	})
+}
+
+// AuthInfo returns information about the authentication type.
+func (m *User) AuthInfo() string {
+	provider := m.Provider()
+	method := m.Method()
+
+	if method.IsDefault() {
+		return provider.Pretty()
+	}
+
+	return fmt.Sprintf("%s (%s)", provider.Pretty(), method.Pretty())
+}
+
+// Passcode returns the related auth key by type, if one exists.
+func (m *User) Passcode(t authn.KeyType) *Passcode {
+	if m == nil {
+		return nil
+	} else if m.UserUID == "" {
+		return nil
+	}
+
+	return FindPasscode(Passcode{UID: m.GetUID(), KeyType: t.String()})
 }
 
 // Username returns the user's login name as sanitized string.
@@ -662,7 +786,7 @@ func (m *User) Settings() *UserSettings {
 	if m.UserSettings != nil {
 		m.UserSettings.UserUID = m.UserUID
 		return m.UserSettings
-	} else if m.UID() == "" {
+	} else if m.GetUID() == "" {
 		m.UserSettings = &UserSettings{}
 		return m.UserSettings
 	} else if err := CreateUserSettings(m); err != nil {
@@ -677,7 +801,7 @@ func (m *User) Details() *UserDetails {
 	if m.UserDetails != nil {
 		m.UserDetails.UserUID = m.UserUID
 		return m.UserDetails
-	} else if m.UID() == "" {
+	} else if m.GetUID() == "" {
 		m.UserDetails = &UserDetails{}
 		return m.UserDetails
 	} else if err := CreateUserDetails(m); err != nil {
@@ -700,7 +824,7 @@ func (m *User) IsRegistered() bool {
 	}
 
 	// Registered users must have an ID, a UID, a username and a known role, except visitor.
-	return m.ID > 0 && m.UserName != "" && rnd.IsUID(m.UserUID, UserUID) && !m.IsVisitor()
+	return m.ID > 0 && m.UserName != "" && m.HasUID() && !m.IsVisitor()
 }
 
 // NotRegistered checks if the user is not registered with an own account.
@@ -742,11 +866,11 @@ func (m *User) IsVisitor() bool {
 
 // HasSharedAccessOnly checks if the user as only access to shared resources.
 func (m *User) HasSharedAccessOnly(resource acl.Resource) bool {
-	if acl.Resources.Deny(resource, m.AclRole(), acl.AccessShared) {
+	if acl.Rules.Deny(resource, m.AclRole(), acl.AccessShared) {
 		return false
 	}
 
-	return acl.Resources.DenyAll(resource, m.AclRole(), acl.Permissions{acl.AccessAll, acl.AccessLibrary})
+	return acl.Rules.DenyAll(resource, m.AclRole(), acl.Permissions{acl.AccessAll, acl.AccessLibrary})
 }
 
 // IsUnknown checks if the user is unknown.
@@ -755,7 +879,7 @@ func (m *User) IsUnknown() bool {
 		return true
 	}
 
-	return !rnd.IsUID(m.UserUID, UserUID) || m.ID == UnknownUser.ID || m.UserUID == UnknownUser.UserUID || m.HasRole(acl.RoleNone)
+	return m.InvalidUID() || m.ID == UnknownUser.ID || m.UserUID == UnknownUser.UserUID || m.HasRole(acl.RoleNone)
 }
 
 // DeleteSessions deletes all active user sessions except those passed as argument.
@@ -819,38 +943,134 @@ func (m *User) SetPassword(password string) error {
 	return m.RegenerateTokens()
 }
 
-// HasPassword checks if the user has the specified password and the account is registered.
-func (m *User) HasPassword(s string) bool {
-	return !m.WrongPassword(s)
+// DeletePassword removes the password of the user account, if one has been set.
+func (m *User) DeletePassword() (err error) {
+	// Make sure the user has a valid UID.
+	if m.InvalidUID() {
+		return fmt.Errorf("invalid user uid")
+	}
+
+	// Find local account password.
+	pw := FindPassword(m.UserUID)
+
+	// Return without error if no password has been set.
+	if pw == nil {
+		return nil
+	}
+
+	// Remove local account password.
+	if err = pw.Delete(); err != nil {
+		event.AuditErr([]string{"user %s", "failed to remove password", "%s"}, m.RefID, err)
+	} else {
+		event.AuditWarn([]string{"user %s", "password has been removed"}, m.RefID)
+	}
+
+	return err
 }
 
-// WrongPassword checks if the given password is incorrect or the account is not registered.
-func (m *User) WrongPassword(s string) bool {
-	// Registered user?
+// InvalidPassword returns true if the specified password is invalid or the account is not registered.
+func (m *User) InvalidPassword(s string) bool {
+	// Fail if not a registered user account.
 	if !m.IsRegistered() {
 		log.Warn("only registered users can log in")
 		return true
 	}
 
-	// Empty password?
+	// Fail if no password has been provided.
 	if s == "" {
 		return true
 	}
 
-	// Fetch password.
+	// Find local account password.
 	pw := FindPassword(m.UserUID)
 
-	// Found?
+	// Fail if no password has been set.
 	if pw == nil {
 		return true
 	}
 
-	// Invalid?
-	if pw.IsWrong(s) {
+	// Fail if the specified password is invalid.
+	if pw.Invalid(s) {
 		return true
 	}
 
+	// Password seems to be valid!
 	return false
+}
+
+// VerifyPassword checks if the user has the specified password and the account is registered.
+func (m *User) VerifyPassword(s string) bool {
+	return !m.InvalidPassword(s)
+}
+
+// InvalidPasscode returns true if the specified passcode cannot be verified or is invalid.
+func (m *User) InvalidPasscode(code string) bool {
+	if m == nil {
+		return true
+	}
+
+	valid, _, _ := m.VerifyPasscode(code)
+
+	return !valid
+}
+
+// VerifyPasscode checks if the specified passcode could be verified and is valid.
+func (m *User) VerifyPasscode(code string) (valid bool, passcode *Passcode, err error) {
+	var recovery bool
+
+	if m == nil {
+		err = errors.New("user is nil")
+	} else if passcode = m.Passcode(authn.KeyTOTP); passcode == nil {
+		err = authn.ErrPasscodeNotSetUp
+	} else if code == "" {
+		err = authn.ErrPasscodeRequired
+	} else if l := len(code); l < 1 || l > 255 {
+		err = authn.ErrInvalidPasscode
+	} else if valid, recovery, err = passcode.Valid(code); recovery {
+		// Deactivate 2FA if recovery code has been used.
+		passcode, err = m.DeactivatePasscode()
+	}
+
+	return valid, passcode, err
+}
+
+// ActivatePasscode activates two-factor authentication with a passcode.
+func (m *User) ActivatePasscode() (passcode *Passcode, err error) {
+	if m == nil {
+		err = errors.New("user is nil")
+	} else if !m.Provider().SupportsPasscodeAuthentication() {
+		err = authn.ErrPasscodeNotSupported
+	} else if passcode = m.Passcode(authn.KeyTOTP); passcode == nil {
+		// Cannot enable 2FA if user has no passcode.
+		err = authn.ErrPasscodeNotSetUp
+	} else if err = passcode.Activate(); err == nil {
+		// Enable 2FA after passcode has been activated.
+		err = m.SetMethod(authn.Method2FA).Save()
+		FlushSessionCache()
+	} else if err != nil {
+		log.Debugf("passcode: %s", clean.Error(err))
+	}
+
+	return passcode, err
+}
+
+// DeactivatePasscode disables two-factor authentication with a passcode.
+func (m *User) DeactivatePasscode() (passcode *Passcode, err error) {
+	if m == nil {
+		err = errors.New("user is nil")
+	} else if passcode = m.Passcode(authn.KeyTOTP); passcode == nil {
+		// Disable 2FA if user has no passcode.
+		err = m.SetMethod(authn.MethodDefault).Save()
+		FlushSessionCache()
+	} else if err = passcode.Delete(); err == nil {
+		// Disable 2FA after passcode has been deleted.
+		err = m.SetMethod(authn.MethodDefault).Save()
+		FlushSessionCache()
+	} else {
+		log.Debugf("passcode: %s", clean.Error(err))
+	}
+
+	return passcode, err
 }
 
 // Validate checks if username, email and role are valid and returns an error otherwise.
@@ -869,7 +1089,7 @@ func (m *User) Validate() (err error) {
 
 	// Check user role.
 	if acl.UserRoles[m.UserRole] == "" {
-		return fmt.Errorf("user role %s is invalid", clean.LogQuote(m.UserRole))
+		return fmt.Errorf("unsupported user role")
 	}
 
 	// Check if the username is unique.
@@ -879,7 +1099,7 @@ func (m *User) Validate() (err error) {
 		Where("user_name = ? AND id <> ?", m.UserName, m.ID).
 		First(&duplicate).Error; err == nil {
 		return fmt.Errorf("user %s already exists", clean.LogQuote(m.UserName))
-	} else if err != gorm.ErrRecordNotFound {
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return err
 	}
 
@@ -902,7 +1122,7 @@ func (m *User) Validate() (err error) {
 		Where("user_email = ? AND id <> ?", m.UserEmail, m.ID).
 		First(&duplicate).Error; err == nil {
 		return fmt.Errorf("email %s already exists", clean.Log(m.UserEmail))
-	} else if err != gorm.ErrRecordNotFound {
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return err
 	}
 
@@ -913,6 +1133,8 @@ func (m *User) Validate() (err error) {
 func (m *User) SetFormValues(frm form.User) *User {
 	m.UserName = frm.Username()
 	m.SetProvider(frm.Provider())
+	m.SetMethod(frm.Method())
+	m.SetAuthID(frm.AuthID, frm.AuthIssuer)
 	m.UserEmail = frm.Email()
 	m.DisplayName = frm.DisplayName
 	m.SuperAdmin = frm.SuperAdmin
@@ -961,7 +1183,7 @@ func (m *User) RegenerateTokens() error {
 
 // RefreshShares updates the list of shares.
 func (m *User) RefreshShares() *User {
-	m.UserShares = FindUserShares(m.UID())
+	m.UserShares = FindUserShares(m.GetUID())
 	return m
 }
 
@@ -1014,8 +1236,8 @@ func (m *User) RedeemToken(token string) (n int) {
 
 	// Find shares.
 	for _, link := range links {
-		if found := FindUserShare(UserShare{UserUID: m.UID(), ShareUID: link.ShareUID}); found == nil {
-			share := NewUserShare(m.UID(), link.ShareUID, link.Perm, link.ExpiresAt())
+		if found := FindUserShare(UserShare{UserUID: m.GetUID(), ShareUID: link.ShareUID}); found == nil {
+			share := NewUserShare(m.GetUID(), link.ShareUID, link.Perm, link.ExpiresAt())
 			share.LinkUID = link.LinkUID
 			share.Comment = link.Comment
 
@@ -1054,13 +1276,16 @@ func (m *User) PrivilegeLevelChange(f form.User) bool {
 		m.CanLogin != f.CanLogin ||
 		m.WebDAV != f.WebDAV ||
 		m.UserAttr != f.Attr() ||
-		m.AuthProvider != f.Provider().String() ||
+		m.AuthProvider != f.AuthProvider ||
+		m.AuthMethod != f.AuthMethod ||
+		m.AuthIssuer != f.AuthIssuer ||
+		m.AuthID != f.AuthID ||
 		m.BasePath != f.BasePath ||
 		m.UploadPath != f.UploadPath
 }
 
 // SaveForm updates the entity using form data and stores it in the database.
-func (m *User) SaveForm(f form.User, changePrivileges bool) error {
+func (m *User) SaveForm(f form.User, u *User) error {
 	if m.UserName == "" || m.ID <= 0 {
 		return fmt.Errorf("system users cannot be modified")
 	} else if (m.ID == 1 || f.SuperAdmin) && acl.RoleAdmin.NotEqual(f.Role()) {
@@ -1099,15 +1324,35 @@ func (m *User) SaveForm(f form.User, changePrivileges bool) error {
 	}
 
 	// Change user privileges only if allowed.
-	if changePrivileges {
-		m.SetRole(f.Role())
-		m.SuperAdmin = f.SuperAdmin
+	if u == nil {
+		// Do nothing.
+	} else if u.IsAdmin() {
+		// Prevent admins from locking themselves out.
+		if u.Equal(m) {
+			m.SetRole(acl.RoleAdmin.String())
+			m.CanLogin = true
+		} else {
+			m.SetRole(f.Role())
+			m.CanLogin = f.CanLogin
+		}
 
-		m.CanLogin = f.CanLogin
 		m.WebDAV = f.WebDAV
 		m.UserAttr = f.Attr()
 
-		m.SetProvider(f.Provider())
+		// Only allow super admins to change the authentication method and make other users super admins.
+		if u.IsSuperAdmin() {
+			if !u.Equal(m) {
+				m.SuperAdmin = f.SuperAdmin
+			}
+
+			if !u.Equal(m) || f.Provider() != authn.ProviderNone {
+				m.SetProvider(f.Provider())
+			}
+
+			m.SetMethod(f.Method())
+			m.SetAuthID(f.AuthID, f.AuthIssuer)
+		}
+
 		m.SetBasePath(f.BasePath)
 		m.SetUploadPath(f.UploadPath)
 	}
@@ -1169,6 +1414,15 @@ func (m *User) SetGivenName(name string) *User {
 func (m *User) SetFamilyName(name string) *User {
 	m.Details().SetFamilyName(name)
 	return m
+}
+
+// HasAvatar reports if a user avatar image has been set.
+func (m *User) HasAvatar() bool {
+	if m == nil {
+		return false
+	}
+
+	return m.Thumb != ""
 }
 
 // SetAvatar updates the user avatar image.

@@ -15,7 +15,7 @@ fi
 DESTDIR=$(realpath "${1:-/usr/local}")
 
 # In addition, you can specify a custom version to be installed as the second argument.
-LIBHEIF_VERSION=${2:-v1.17.1}
+LIBHEIF_VERSION=${2:-v1.18.1}
 
 # Determine the system architecture.
 if [[ $PHOTOPRISM_ARCH ]]; then
@@ -54,6 +54,15 @@ if [[ $(id -u) != "0" ]] && [[ $DESTDIR == "/usr" || $DESTDIR == "/usr/local" ]]
 fi
 
 mkdir -p "$DESTDIR"
+
+# Map codenames to find and use a compatible version.
+case $VERSION_CODENAME in
+  vera | virginia)
+    VERSION_CODENAME=jammy
+    ;;
+esac
+
+echo "Installing libheif..."
 
 ARCHIVE="libheif-${VERSION_CODENAME}-${DESTARCH}-${LIBHEIF_VERSION}.tar.gz"
 URL="https://dl.photoprism.app/dist/libheif/${ARCHIVE}"

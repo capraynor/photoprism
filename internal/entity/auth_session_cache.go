@@ -9,12 +9,11 @@ import (
 	"github.com/photoprism/photoprism/internal/event"
 	"github.com/photoprism/photoprism/pkg/clean"
 	"github.com/photoprism/photoprism/pkg/rnd"
-	"github.com/photoprism/photoprism/pkg/unix"
 )
 
-// Create a new session cache with an expiration time of 15 minutes.
-var sessionCacheExpiration = 15 * time.Minute
-var sessionCache = gc.New(sessionCacheExpiration, 5*time.Minute)
+// SessionCacheDuration specifies how long sessions are cached.
+var SessionCacheDuration = 15 * time.Minute
+var sessionCache = gc.New(SessionCacheDuration, time.Minute)
 
 // FindSessionByAuthToken finds a session based on the auth token string or returns nil if it does not exist.
 func FindSessionByAuthToken(token string) (*Session, error) {
@@ -32,7 +31,8 @@ func FindSession(id string) (*Session, error) {
 	// Find the session in the cache with a fallback to the database.
 	if cacheData, ok := sessionCache.Get(id); ok && cacheData != nil {
 		if cached := cacheData.(*Session); !cached.Expired() {
-			cached.LastActive = unix.Time()
+			// Set session activity timestamp, also update the last_active column in the sessions table if it is new.
+			cached.UpdateLastActive(cached.LastActive <= 0)
 			return cached, nil
 		} else if err := cached.Delete(); err != nil {
 			event.AuditErr([]string{cached.IP(), "session %s", "failed to delete after expiration", "%s"}, cached.RefID, err)
@@ -44,8 +44,9 @@ func FindSession(id string) (*Session, error) {
 	} else if !rnd.IsSessionID(found.ID) {
 		return found, fmt.Errorf("invalid session id %s", clean.LogQuote(found.ID))
 	} else if !found.Expired() {
-		found.UpdateLastActive()
-		CacheSession(found, sessionCacheExpiration)
+		// Set session activity timestamp and update the last_active column in the sessions table.
+		found.UpdateLastActive(true)
+		CacheSession(found, SessionCacheDuration)
 		return found, nil
 	} else if err := found.Delete(); err != nil {
 		event.AuditErr([]string{found.IP(), "session %s", "failed to delete after expiration", "%s"}, found.RefID, err)
@@ -68,7 +69,7 @@ func CacheSession(s *Session, d time.Duration) {
 	}
 
 	if d == 0 {
-		d = sessionCacheExpiration
+		d = SessionCacheDuration
 	}
 
 	if s.PreviewToken != "" {
@@ -80,34 +81,4 @@ func CacheSession(s *Session, d time.Duration) {
 	}
 
 	sessionCache.Set(s.ID, s, d)
-}
-
-// DeleteSession permanently deletes a session.
-func DeleteSession(s *Session) error {
-	if s == nil {
-		return nil
-	} else if !rnd.IsSessionID(s.ID) {
-		return fmt.Errorf("invalid session id")
-	}
-
-	DeleteFromSessionCache(s.ID)
-
-	if s.PreviewToken != "" {
-		PreviewToken.Set(s.PreviewToken, s.ID)
-	}
-
-	if s.DownloadToken != "" {
-		DownloadToken.Set(s.DownloadToken, s.ID)
-	}
-
-	return UnscopedDb().Delete(s).Error
-}
-
-// DeleteFromSessionCache deletes a session from the cache.
-func DeleteFromSessionCache(id string) {
-	if id == "" {
-		return
-	}
-
-	sessionCache.Delete(id)
 }

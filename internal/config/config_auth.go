@@ -2,6 +2,7 @@ package config
 
 import (
 	"regexp"
+	"time"
 
 	"golang.org/x/crypto/bcrypt"
 
@@ -34,11 +35,11 @@ func (c *Config) SetAuthMode(mode string) {
 	case AuthModePublic:
 		c.options.AuthMode = AuthModePublic
 		c.options.Public = true
-		entity.CheckTokens = false
+		entity.ValidateTokens = false
 	default:
 		c.options.AuthMode = AuthModePasswd
 		c.options.Public = false
-		entity.CheckTokens = true
+		entity.ValidateTokens = true
 	}
 }
 
@@ -138,7 +139,7 @@ func (c *Config) LoginUri() string {
 	return c.options.LoginUri
 }
 
-// SessionMaxAge returns the time in seconds until API sessions expire automatically.
+// SessionMaxAge returns the standard session expiration time in seconds.
 func (c *Config) SessionMaxAge() int64 {
 	if c.options.SessionMaxAge < 0 {
 		return 0
@@ -149,7 +150,7 @@ func (c *Config) SessionMaxAge() int64 {
 	return c.options.SessionMaxAge
 }
 
-// SessionTimeout returns the time in seconds until API sessions expire due to inactivity
+// SessionTimeout returns the standard session idle time in seconds.
 func (c *Config) SessionTimeout() int64 {
 	if c.options.SessionTimeout < 0 {
 		return 0
@@ -158,6 +159,24 @@ func (c *Config) SessionTimeout() int64 {
 	}
 
 	return c.options.SessionTimeout
+}
+
+// SessionCache returns the default session cache duration in seconds.
+func (c *Config) SessionCache() int64 {
+	if c.options.SessionCache == 0 {
+		return DefaultSessionCache
+	} else if c.options.SessionCache < 60 {
+		return 60
+	} else if c.options.SessionCache > 3600 {
+		return 3600
+	}
+
+	return c.options.SessionCache
+}
+
+// SessionCacheDuration returns the default session cache duration.
+func (c *Config) SessionCacheDuration() time.Duration {
+	return time.Duration(c.SessionCache()) * time.Second
 }
 
 // DownloadToken returns the DOWNLOAD api token (you can optionally use a static value for permanent caching).

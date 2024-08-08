@@ -7,13 +7,13 @@ import (
 
 	"github.com/photoprism/photoprism/internal/config"
 	"github.com/photoprism/photoprism/internal/entity"
+	"github.com/photoprism/photoprism/internal/entity/query"
+	"github.com/photoprism/photoprism/internal/entity/search"
 	"github.com/photoprism/photoprism/internal/form"
 	"github.com/photoprism/photoprism/internal/mutex"
 	"github.com/photoprism/photoprism/internal/photoprism"
-	"github.com/photoprism/photoprism/internal/query"
-	"github.com/photoprism/photoprism/internal/remote"
-	"github.com/photoprism/photoprism/internal/remote/webdav"
-	"github.com/photoprism/photoprism/internal/search"
+	"github.com/photoprism/photoprism/internal/service"
+	"github.com/photoprism/photoprism/internal/service/webdav"
 	"github.com/photoprism/photoprism/internal/thumb"
 	"github.com/photoprism/photoprism/pkg/clean"
 	"github.com/photoprism/photoprism/pkg/fs"
@@ -64,7 +64,7 @@ func (w *Share) Start() (err error) {
 			return nil
 		}
 
-		if a.AccType != remote.ServiceWebDAV {
+		if a.AccType != service.WebDAV {
 			continue
 		}
 
@@ -86,7 +86,7 @@ func (w *Share) Start() (err error) {
 			if s, ok := thumb.Sizes[thumb.Name(a.ShareSize)]; ok {
 				size = s
 			} else {
-				size = thumb.Sizes[thumb.Fit2048]
+				size = thumb.SizeFit1920
 			}
 		}
 
@@ -159,7 +159,7 @@ func (w *Share) Start() (err error) {
 			return nil
 		}
 
-		if a.AccType != remote.ServiceWebDAV {
+		if a.AccType != service.WebDAV {
 			continue
 		}
 

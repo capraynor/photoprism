@@ -1,5 +1,5 @@
 ##################################################### BUILD STAGE ######################################################
-FROM photoprism/develop:armv7 as build
+FROM photoprism/develop:armv7 AS build
 
 # Copyright © 2018 - 2024 PhotoPrism UG. All rights reserved.
 #
@@ -19,13 +19,13 @@ COPY . .
 RUN make all install DESTDIR=/opt/photoprism
 
 ################################################## PRODUCTION STAGE ####################################################
-#### Base Image: Ubuntu 23.10 (Mantic Minotaur)
-FROM ubuntu:mantic
+#### Base Image: Ubuntu 24.04 LTS (Noble Numbat)
+FROM ubuntu:noble
 
 # Add Open Container Initiative (OCI) annotations.
 # See: https://github.com/opencontainers/image-spec/blob/main/annotations.md
 LABEL org.opencontainers.image.title="PhotoPrism® (ARMv7)"
-LABEL org.opencontainers.image.description="Ubuntu 23.10 (Mantic Minotaur)"
+LABEL org.opencontainers.image.description="Ubuntu 24.04 LTS (Noble Numbat)"
 LABEL org.opencontainers.image.url="https://hub.docker.com/r/photoprism/photoprism"
 LABEL org.opencontainers.image.source="https://github.com/photoprism/photoprism"
 LABEL org.opencontainers.image.documentation="https://docs.photoprism.app/getting-started/"
@@ -47,6 +47,7 @@ ENV PHOTOPRISM_ARCH=$TARGETARCH \
     TMPDIR="/tmp" \
     DEBIAN_FRONTEND="noninteractive" \
     TF_CPP_MIN_LOG_LEVEL="2" \
+    MALLOC_ARENA_MAX="4" \
     PROG="photoprism" \
     PHOTOPRISM_ASSETS_PATH="/opt/photoprism/assets" \
     PHOTOPRISM_IMPORT_PATH="/photoprism/import" \
@@ -82,16 +83,13 @@ ENV PHOTOPRISM_ARCH=$TARGETARCH \
     PHOTOPRISM_DISABLE_FACES="false" \
     PHOTOPRISM_DISABLE_CLASSIFICATION="false" \
     PHOTOPRISM_RAW_PRESETS="false" \
-    PHOTOPRISM_THUMB_FILTER="lanczos" \
-    PHOTOPRISM_THUMB_UNCACHED="false" \
-    PHOTOPRISM_THUMB_SIZE=2048 \
+    PHOTOPRISM_THUMB_SIZE=1920 \
     PHOTOPRISM_THUMB_SIZE_UNCACHED=7680 \
+    PHOTOPRISM_THUMB_UNCACHED="false" \
     PHOTOPRISM_JPEG_SIZE=7680 \
-    PHOTOPRISM_JPEG_QUALITY=85 \
-    PHOTOPRISM_WORKERS=0 \
-    PHOTOPRISM_WAKEUP_INTERVAL=900 \
-    PHOTOPRISM_AUTO_INDEX=300 \
-    PHOTOPRISM_AUTO_IMPORT=300 \
+    PHOTOPRISM_PNG_SIZE=7680 \
+    PHOTOPRISM_AUTO_INDEX="300" \
+    PHOTOPRISM_AUTO_IMPORT="-1" \
     PHOTOPRISM_INIT="https"
 
 # Copy dist files, scripts, and debian backports sources list.
@@ -106,11 +104,12 @@ RUN echo 'APT::Acquire::Retries "3";' > /etc/apt/apt.conf.d/80retries && \
     echo 'APT::Get::Fix-Missing "true";' > /etc/apt/apt.conf.d/80fixmissing && \
     echo 'force-confold' > /etc/dpkg/dpkg.cfg.d/force-confold && \
     apt-get update && apt-get -qq dist-upgrade && \
-    apt-get -qq install --no-install-recommends \
-        libc6 ca-certificates bash sudo nano avahi-utils jq lsof lshw \
-        exiftool mariadb-client sqlite3 tzdata gpg make zip unzip wget curl rsync \
-        imagemagick libvips-dev rawtherapee ffmpeg libavcodec-extra x264 x265 libde265-dev \
-        libaom3 libvpx7 libwebm1 libjpeg8 libmatroska7 libdvdread8 libebml5 libgav1-bin libatomic1 \
+    apt-get -qq install \
+        libc6 libbsd0 ca-certificates bash sudo nano tzdata gpg make zip unzip wget curl rsync\
+        xz-utils avahi-utils jq lsof lshw libebml5 libgav1-bin libatomic1 exiftool sqlite3 \
+        ffmpeg imagemagick libvips-dev rawtherapee libjxl-dev libjxl-tools libffmpeg-nvenc-dev \
+        libswscale-dev libavfilter-extra libavformat-extra libavcodec-extra x264 x265 libde265-dev libaom-dev \
+        libvpx-dev libwebm-dev libjpeg-dev libmatroska-dev libdvdread-dev libdav1d-dev \
     && \
     /scripts/install-libheif.sh && \
     echo 'alias ll="ls -alh"' >> /etc/skel/.bashrc && \

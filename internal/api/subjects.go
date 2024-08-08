@@ -5,13 +5,13 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/photoprism/photoprism/internal/acl"
+	"github.com/photoprism/photoprism/internal/auth/acl"
 	"github.com/photoprism/photoprism/internal/entity"
 	"github.com/photoprism/photoprism/internal/event"
 	"github.com/photoprism/photoprism/internal/form"
-	"github.com/photoprism/photoprism/internal/i18n"
 	"github.com/photoprism/photoprism/internal/mutex"
 	"github.com/photoprism/photoprism/pkg/clean"
+	"github.com/photoprism/photoprism/pkg/i18n"
 	"github.com/photoprism/photoprism/pkg/txt"
 )
 
@@ -61,14 +61,15 @@ func UpdateSubject(router *gin.RouterGroup) {
 			return
 		}
 
-		// Initialize form.
+		// Create request value form.
 		f, err := form.NewSubject(*m)
 
+		// Assign and validate request form values.
 		if err != nil {
 			log.Errorf("subject: %s (new form)", err)
 			AbortSaveFailed(c)
 			return
-		} else if err := c.BindJSON(&f); err != nil {
+		} else if err = c.BindJSON(&f); err != nil {
 			log.Errorf("subject: %s (update form)", err)
 			AbortBadRequest(c)
 			return
@@ -98,7 +99,8 @@ func UpdateSubject(router *gin.RouterGroup) {
 //
 //   - uid: string Subject UID
 //
-// POST /api/v1/subjects/:uid/like
+//     @Tags	Subjects
+//     @Router	/api/v1/subjects/{uid}/like [post]
 func LikeSubject(router *gin.RouterGroup) {
 	router.POST("/subjects/:uid/like", func(c *gin.Context) {
 		s := Auth(c, acl.ResourcePeople, acl.ActionUpdate)

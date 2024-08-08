@@ -10,10 +10,10 @@ import (
 	"github.com/jinzhu/gorm"
 	"github.com/ulule/deepcopier"
 
+	"github.com/photoprism/photoprism/internal/entity/sortby"
 	"github.com/photoprism/photoprism/internal/form"
 	"github.com/photoprism/photoprism/pkg/clean"
 	"github.com/photoprism/photoprism/pkg/rnd"
-	"github.com/photoprism/photoprism/pkg/sortby"
 	"github.com/photoprism/photoprism/pkg/txt"
 )
 
@@ -63,7 +63,7 @@ func (m *Folder) BeforeCreate(scope *gorm.Scope) error {
 
 // NewFolder creates a new file system directory entity.
 func NewFolder(root, pathName string, modTime time.Time) Folder {
-	now := TimeStamp()
+	now := Now()
 
 	pathName = strings.Trim(pathName, string(os.PathSeparator))
 

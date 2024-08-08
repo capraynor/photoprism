@@ -10,8 +10,8 @@ import (
 
 	"github.com/photoprism/photoprism/internal/config"
 	"github.com/photoprism/photoprism/internal/thumb"
-	"github.com/photoprism/photoprism/pkg/colors"
-	"github.com/photoprism/photoprism/pkg/fastwalk"
+	"github.com/photoprism/photoprism/pkg/fs/fastwalk"
+	"github.com/photoprism/photoprism/pkg/media/colors"
 )
 
 func TestMediaFile_Colors_Testdata(t *testing.T) {
@@ -199,6 +199,12 @@ func TestMediaFile_Colors(t *testing.T) {
 	})
 	t.Run("Random.docx", func(t *testing.T) {
 		file, fileErr := NewMediaFile(c.ExamplesPath() + "/Random.docx")
+		p, fileErr := file.Colors(c.ThumbCachePath())
+		assert.Error(t, fileErr, "no color information: not a JPEG file")
+		t.Log(p)
+	})
+	t.Run("animated-earth.thm", func(t *testing.T) {
+		file, fileErr := NewMediaFile(c.ExamplesPath() + "/animated-earth.thm")
 		p, fileErr := file.Colors(c.ThumbCachePath())
 		assert.Error(t, fileErr, "no color information: not a JPEG file")
 		t.Log(p)

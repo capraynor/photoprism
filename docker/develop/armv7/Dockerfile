@@ -1,5 +1,5 @@
-#### Base Image: Ubuntu 23.10 (Mantic Minotaur)
-FROM ubuntu:mantic
+#### Base Image: Ubuntu 24.04 LTS (Noble Numbat)
+FROM ubuntu:noble
 
 # Copyright © 2018 - 2024 PhotoPrism UG. All rights reserved.
 #
@@ -9,7 +9,7 @@ FROM ubuntu:mantic
 # Add Open Container Initiative (OCI) annotations.
 # See: https://github.com/opencontainers/image-spec/blob/main/annotations.md
 LABEL org.opencontainers.image.title="PhotoPrism® Build Image (ARMv7)"
-LABEL org.opencontainers.image.description="Ubuntu 23.10 (Mantic Minotaur)"
+LABEL org.opencontainers.image.description="Ubuntu 24.04 LTS (Noble Numbat)"
 LABEL org.opencontainers.image.url="https://hub.docker.com/repository/docker/photoprism/develop"
 LABEL org.opencontainers.image.source="https://github.com/photoprism/photoprism"
 LABEL org.opencontainers.image.documentation="https://docs.photoprism.app/developer-guide/setup/"
@@ -31,6 +31,7 @@ ENV PHOTOPRISM_ARCH=$TARGETARCH \
     DEBIAN_FRONTEND="noninteractive" \
     TMPDIR="/tmp" \
     TF_CPP_MIN_LOG_LEVEL="0" \
+    MALLOC_ARENA_MAX="4" \
     GOPATH="/go" \
     GOBIN="/usr/local/bin" \
     GO111MODULE="on" \
@@ -49,14 +50,13 @@ RUN echo 'APT::Acquire::Retries "3";' > /etc/apt/apt.conf.d/80retries && \
     echo 'APT::Get::Fix-Missing "true";' > /etc/apt/apt.conf.d/80fixmissing && \
     echo 'force-confold' > /etc/dpkg/dpkg.cfg.d/force-confold && \
     apt-get update && apt-get -qq dist-upgrade && apt-get -qq install --no-install-recommends \
-        apt-utils gpg pkg-config software-properties-common ca-certificates avahi-utils \
-        build-essential gcc g++ sudo bash make nano lsof lshw git jq \
-        autoconf automake cmake libtool libjpeg-dev libpng-dev libwebp-dev \
-        zip unzip wget curl rsync sqlite3 chrpath gettext libc6-dev \
-        libssl-dev libxft-dev libfreetype6 libfreetype6-dev libfontconfig1 \
-        libfontconfig1-dev libhdf5-serial-dev libzmq3-dev \
+        apt-utils gpg pkg-config software-properties-common ca-certificates xz-utils avahi-utils \
+        build-essential gcc g++ sudo bash make nano lsof lshw git jq autoconf automake cmake \
+        libtool libjpeg-dev libpng-dev libwebp-dev zip unzip wget curl rsync sqlite3 chrpath \
+        gettext libc6-dev libbsd-dev libssl-dev libxft-dev libfreetype6 libfreetype6-dev libfontconfig1 \
+        libfontconfig1-dev libhdf5-serial-dev libzmq3-dev libjxl-dev libjxl-tools \
         libx264-dev libx265-dev libde265-dev libaom-dev libnss3 libxtst6 librsvg2-bin tzdata \
-        exiftool ffmpeg libavcodec-extra \
+        exiftool ffmpeg libavcodec-extra libdav1d-dev libvips-dev \
     && \
     /scripts/install-nodejs.sh && \
     /scripts/install-libheif.sh && \

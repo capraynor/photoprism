@@ -1,8 +1,6 @@
 <template>
   <div class="p-tab p-settings-library">
-    <v-form ref="form" lazy-validation
-            dense class="p-form-settings pb-1" accept-charset="UTF-8"
-            @submit.prevent="onChange">
+    <v-form ref="form" lazy-validation dense class="p-form-settings pb-1" accept-charset="UTF-8" @submit.prevent="onChange">
       <v-card flat tile class="mt-0 px-1 application">
         <v-card-title primary-title class="pb-0">
           <h3 class="body-2 mb-0">
@@ -49,7 +47,7 @@
                 class="ma-0 pa-0 input-convert"
                 color="secondary-dark"
                 :label="$gettext('Preview Images')"
-                :hint="$gettext('Automatically create thumbnails for files that cannot otherwise be indexed or viewed.')"
+                :hint="$gettext('Automatically generate thumbnails for files that cannot otherwise be indexed or viewed.')"
                 prepend-icon="image"
                 persistent-hint
                 @change="onChange"
@@ -61,8 +59,7 @@
       </v-card>
 
       <v-card flat tile class="mt-0 px-1 application">
-        <v-card-title primary-title class="pb-0"
-                      :title="$gettext('Stacks group files with a similar frame of reference, but differences of quality, format, size or color.')">
+        <v-card-title primary-title class="pb-0" :title="$gettext('Stacks group files with a similar frame of reference, but differences of quality, format, size or color.')">
           <h3 class="body-2 mb-0">
             <translate>Stacks</translate>
           </h3>
@@ -129,7 +126,7 @@ import * as options from "options/options";
 import Event from "pubsub-js";
 
 export default {
-  name: 'PSettingsLibrary',
+  name: "PSettingsLibrary",
   data() {
     const isDemo = this.$config.get("demo");
 
@@ -167,15 +164,18 @@ export default {
         this.busy = true;
       }
 
-      this.settings.save().then(() => {
-        if (reload) {
-          this.$notify.info(this.$gettext("Reloading…"));
-          this.$notify.blockUI();
-          setTimeout(() => window.location.reload(), 100);
-        } else {
-          this.$notify.success(this.$gettext("Changes successfully saved"));
-        }
-      }).finally(() => this.busy = false);
+      this.settings
+        .save()
+        .then(() => {
+          if (reload) {
+            this.$notify.info(this.$gettext("Reloading…"));
+            this.$notify.blockUI();
+            setTimeout(() => window.location.reload(), 100);
+          } else {
+            this.$notify.success(this.$gettext("Changes successfully saved"));
+          }
+        })
+        .finally(() => (this.busy = false));
     },
   },
 };

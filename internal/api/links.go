@@ -6,10 +6,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/photoprism/photoprism/internal/acl"
+	"github.com/photoprism/photoprism/internal/auth/acl"
 	"github.com/photoprism/photoprism/internal/entity"
+	"github.com/photoprism/photoprism/internal/entity/query"
 	"github.com/photoprism/photoprism/internal/form"
-	"github.com/photoprism/photoprism/internal/query"
 	"github.com/photoprism/photoprism/pkg/clean"
 	"github.com/photoprism/photoprism/pkg/txt"
 )
@@ -27,6 +27,7 @@ func UpdateLink(c *gin.Context) {
 
 	var f form.Link
 
+	// Assign and validate request form values.
 	if err := c.BindJSON(&f); err != nil {
 		log.Debugf("share: %s", err)
 		AbortBadRequest(c)
@@ -89,7 +90,8 @@ func DeleteLink(c *gin.Context) {
 
 // CreateLink adds a new share link and return it as JSON.
 //
-// POST /api/v1/:entity/:uid/links
+//	@Tags Links
+//	@Router	/api/v1/{entity}/{uid}/links [post]
 func CreateLink(c *gin.Context) {
 	s := Auth(c, acl.ResourceShares, acl.ActionCreate)
 
@@ -139,7 +141,8 @@ func CreateLink(c *gin.Context) {
 
 // CreateAlbumLink adds a new album share link and return it as JSON.
 //
-// POST /api/v1/albums/:uid/links
+//	@Tags Links, Albums
+//	@Router	/api/v1/albums/{uid}/links [post]
 func CreateAlbumLink(router *gin.RouterGroup) {
 	router.POST("/albums/:uid/links", func(c *gin.Context) {
 		s := Auth(c, acl.ResourceAlbums, acl.ActionShare)
@@ -213,7 +216,8 @@ func GetAlbumLinks(router *gin.RouterGroup) {
 
 // CreatePhotoLink adds a new photo share link and return it as JSON.
 //
-// POST /api/v1/photos/:uid/links
+//	@Tags 		Links, Photos
+//	@Router		/api/v1/photos/{uid}/links [post]
 func CreatePhotoLink(router *gin.RouterGroup) {
 	router.POST("/photos/:uid/links", func(c *gin.Context) {
 		s := Auth(c, acl.ResourcePhotos, acl.ActionShare)
@@ -285,7 +289,8 @@ func GetPhotoLinks(router *gin.RouterGroup) {
 
 // CreateLabelLink adds a new label share link and return it as JSON.
 //
-// POST /api/v1/labels/:uid/links
+//	@Tags 		Links, Labels
+//	@Router		/api/v1/labels/{uid}/links [post]
 func CreateLabelLink(router *gin.RouterGroup) {
 	router.POST("/labels/:uid/links", func(c *gin.Context) {
 		s := Auth(c, acl.ResourceLabels, acl.ActionShare)

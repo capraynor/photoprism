@@ -1,6 +1,6 @@
 package entity
 
-import "github.com/photoprism/photoprism/pkg/report"
+import "github.com/photoprism/photoprism/pkg/txt/report"
 
 type DetailsMap map[string]Details
 
@@ -31,8 +31,8 @@ var DetailsFixtures = DetailsMap{
 		Artist:       "Hans",
 		Copyright:    "copy",
 		License:      "MIT",
-		CreatedAt:    TimeStamp(),
-		UpdatedAt:    TimeStamp(),
+		CreatedAt:    Now(),
+		UpdatedAt:    Now(),
 		KeywordsSrc:  "meta",
 		NotesSrc:     "manual",
 		SubjectSrc:   "meta",
@@ -40,16 +40,16 @@ var DetailsFixtures = DetailsMap{
 		CopyrightSrc: "manual",
 		LicenseSrc:   "manual",
 	},
-	"blacklist": {
+	"non-photographic": {
 		PhotoID:      1000001,
 		Keywords:     "screenshot, info",
 		Notes:        "notes",
-		Subject:      "Blacklist",
+		Subject:      "Non Photographic",
 		Artist:       "Hans",
 		Copyright:    "copy",
 		License:      "MIT",
-		CreatedAt:    TimeStamp(),
-		UpdatedAt:    TimeStamp(),
+		CreatedAt:    Now(),
+		UpdatedAt:    Now(),
 		KeywordsSrc:  "",
 		NotesSrc:     "",
 		SubjectSrc:   "meta",
@@ -65,8 +65,8 @@ var DetailsFixtures = DetailsMap{
 		Artist:       "Jens Mander",
 		Copyright:    "Copyright 2020",
 		License:      report.NotAssigned,
-		CreatedAt:    TimeStamp(),
-		UpdatedAt:    TimeStamp(),
+		CreatedAt:    Now(),
+		UpdatedAt:    Now(),
 		KeywordsSrc:  "meta",
 		NotesSrc:     "manual",
 		SubjectSrc:   "meta",

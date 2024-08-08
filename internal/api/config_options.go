@@ -8,10 +8,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"gopkg.in/yaml.v2"
 
-	"github.com/photoprism/photoprism/internal/acl"
+	"github.com/photoprism/photoprism/internal/auth/acl"
 	"github.com/photoprism/photoprism/internal/entity"
-	"github.com/photoprism/photoprism/internal/get"
 	"github.com/photoprism/photoprism/internal/mutex"
+	"github.com/photoprism/photoprism/internal/photoprism/get"
 	"github.com/photoprism/photoprism/pkg/clean"
 	"github.com/photoprism/photoprism/pkg/fs"
 )
@@ -36,7 +36,8 @@ func GetConfigOptions(router *gin.RouterGroup) {
 
 // SaveConfigOptions updates backend config options.
 //
-// POST /api/v1/config/options
+//	@Tags Settings
+//	@Router	/api/v1/config/options [post]
 func SaveConfigOptions(router *gin.RouterGroup) {
 	router.POST("/config/options", func(c *gin.Context) {
 		s := Auth(c, acl.ResourceConfig, acl.ActionManage)
@@ -91,7 +92,7 @@ func SaveConfigOptions(router *gin.RouterGroup) {
 
 		// Make sure directory exists.
 		if err = fs.MkdirAll(filepath.Dir(fileName)); err != nil {
-			log.Errorf("config: failed creating config path %s (%s)", filepath.Dir(fileName), err)
+			log.Errorf("config: failed to create config path %s (%s)", filepath.Dir(fileName), err)
 			c.AbortWithStatusJSON(http.StatusInternalServerError, err)
 			return
 		}

@@ -1,12 +1,13 @@
 package entity
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/jinzhu/gorm"
 
-	"github.com/photoprism/photoprism/internal/migrate"
+	"github.com/photoprism/photoprism/internal/entity/migrate"
 	"github.com/photoprism/photoprism/pkg/clean"
 )
 
@@ -18,7 +19,7 @@ var Entities = Tables{
 	migrate.Version{}.TableName():   &migrate.Version{},
 	Error{}.TableName():             &Error{},
 	Password{}.TableName():          &Password{},
-	AuthKey{}.TableName():           &AuthKey{},
+	Passcode{}.TableName():          &Passcode{},
 	User{}.TableName():              &User{},
 	UserDetails{}.TableName():       &UserDetails{},
 	UserSettings{}.TableName():      &UserSettings{},
@@ -54,8 +55,8 @@ var Entities = Tables{
 	UserShare{}.TableName():         &UserShare{},
 }
 
-// WaitForMigration waits for the database migration to be successful.
-func (list Tables) WaitForMigration(db *gorm.DB) {
+// WaitForMigration waits for the database migration to be successful and returns an error otherwise.
+func (list Tables) WaitForMigration(db *gorm.DB) error {
 	type RowCount struct {
 		Count int
 	}
@@ -73,10 +74,12 @@ func (list Tables) WaitForMigration(db *gorm.DB) {
 			}
 
 			if i == attempts {
-				panic("migration failed")
+				return errors.New("some database tables are missing")
 			}
 		}
 	}
+
+	return nil
 }
 
 // Truncate removes all data from tables without dropping them.

@@ -9,12 +9,12 @@ import (
 
 	"github.com/photoprism/photoprism/internal/thumb"
 	"github.com/photoprism/photoprism/pkg/clean"
-	"github.com/photoprism/photoprism/pkg/colors"
+	"github.com/photoprism/photoprism/pkg/media/colors"
 )
 
 // Colors returns the ColorPerception of an image (only JPEG supported).
 func (m *MediaFile) Colors(thumbPath string) (perception colors.ColorPerception, err error) {
-	if !m.IsPreviewImage() {
+	if !m.IsPreviewImage() || m.IsThumb() {
 		return perception, fmt.Errorf("%s is not a jpeg", clean.Log(m.BaseName()))
 	}
 

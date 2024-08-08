@@ -5,7 +5,7 @@ import (
 
 	"github.com/photoprism/photoprism/internal/form"
 	"github.com/photoprism/photoprism/pkg/authn"
-	"github.com/photoprism/photoprism/pkg/report"
+	"github.com/photoprism/photoprism/pkg/txt/report"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -30,7 +30,7 @@ func TestFindClient(t *testing.T) {
 		}
 
 		assert.Equal(t, m.UserUID, UserFixtures.Get("alice").UserUID)
-		assert.Equal(t, expected.ClientUID, m.UID())
+		assert.Equal(t, expected.ClientUID, m.GetUID())
 		assert.NotEmpty(t, m.CreatedAt)
 		assert.NotEmpty(t, m.UpdatedAt)
 	})
@@ -44,7 +44,7 @@ func TestFindClient(t *testing.T) {
 		}
 
 		assert.Equal(t, m.UserUID, UserFixtures.Get("bob").UserUID)
-		assert.Equal(t, expected.ClientUID, m.UID())
+		assert.Equal(t, expected.ClientUID, m.GetUID())
 		assert.NotEmpty(t, m.CreatedAt)
 		assert.NotEmpty(t, m.UpdatedAt)
 	})
@@ -58,7 +58,7 @@ func TestFindClient(t *testing.T) {
 		}
 
 		assert.Empty(t, m.UserUID)
-		assert.Equal(t, expected.ClientUID, m.UID())
+		assert.Equal(t, expected.ClientUID, m.GetUID())
 		assert.NotEmpty(t, m.CreatedAt)
 		assert.NotEmpty(t, m.UpdatedAt)
 	})
@@ -71,11 +71,11 @@ func TestFindClient(t *testing.T) {
 func TestClient_NoUID(t *testing.T) {
 	t.Run("True", func(t *testing.T) {
 		c := Client{ClientUID: ""}
-		assert.True(t, c.NoUID())
+		assert.True(t, c.InvalidUID())
 	})
 	t.Run("False", func(t *testing.T) {
 		c := Client{ClientUID: "cs5cpu17n6gj2hgt"}
-		assert.False(t, c.NoUID())
+		assert.False(t, c.InvalidUID())
 	})
 }
 
@@ -269,7 +269,7 @@ func TestClient_NewSecret(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		assert.True(t, m.HasSecret(s))
+		assert.True(t, m.VerifySecret(s))
 		assert.NotEmpty(t, s)
 	})
 	t.Run("EmptyUID", func(t *testing.T) {
@@ -278,7 +278,7 @@ func TestClient_NewSecret(t *testing.T) {
 		s, err := m.NewSecret()
 
 		assert.Error(t, err)
-		assert.False(t, m.HasSecret(s))
+		assert.False(t, m.VerifySecret(s))
 		assert.Empty(t, s)
 	})
 }
@@ -303,15 +303,15 @@ func TestClient_SetSecret(t *testing.T) {
 func TestClient_Provider(t *testing.T) {
 	t.Run("New", func(t *testing.T) {
 		client := NewClient()
-		assert.Equal(t, authn.ProviderClientCredentials, client.Provider())
+		assert.Equal(t, authn.ProviderClient, client.Provider())
 	})
 	t.Run("Alice", func(t *testing.T) {
 		client := ClientFixtures.Get("alice")
-		assert.Equal(t, authn.ProviderClientCredentials, client.Provider())
+		assert.Equal(t, authn.ProviderClient, client.Provider())
 	})
 	t.Run("Bob", func(t *testing.T) {
 		client := ClientFixtures.Get("bob")
-		assert.Equal(t, authn.ProviderClientCredentials, client.Provider())
+		assert.Equal(t, authn.ProviderClient, client.Provider())
 	})
 }
 
@@ -339,14 +339,14 @@ func TestClient_UpdateLastActive(t *testing.T) {
 
 		assert.Empty(t, m.LastActive)
 
-		c := m.UpdateLastActive()
+		c := m.UpdateLastActive(true)
 
 		assert.NotEmpty(t, c.LastActive)
 	})
 	t.Run("EmptyUID", func(t *testing.T) {
 		var m = Client{ClientName: "No UUID"}
 
-		c := m.UpdateLastActive()
+		c := m.UpdateLastActive(true)
 
 		assert.Empty(t, c.LastActive)
 	})
@@ -401,7 +401,7 @@ func TestClient_EnforceAuthTokenLimit(t *testing.T) {
 	})
 }
 
-func TestClient_HasPassword(t *testing.T) {
+func TestClient_VerifySecret(t *testing.T) {
 	t.Run("Alice", func(t *testing.T) {
 		expected := ClientFixtures.Get("alice")
 
@@ -411,13 +411,13 @@ func TestClient_HasPassword(t *testing.T) {
 			t.Fatal("result should not be nil")
 		}
 
-		assert.Equal(t, expected.ClientUID, m.UID())
-		assert.False(t, m.HasSecret("xcCbOrw6I0vcoXzhnOmXhjpVSyFq0l0e"))
-		assert.False(t, m.HasSecret("aaCbOrw6I0vcoXzhnOmXhjpVSyFq0l0e"))
-		assert.False(t, m.HasSecret(""))
-		assert.True(t, m.WrongSecret("xcCbOrw6I0vcoXzhnOmXhjpVSyFq0l0e"))
-		assert.True(t, m.WrongSecret("aaCbOrw6I0vcoXzhnOmXhjpVSyFq0l0e"))
-		assert.True(t, m.WrongSecret(""))
+		assert.Equal(t, expected.ClientUID, m.GetUID())
+		assert.False(t, m.VerifySecret("xcCbOrw6I0vcoXzhnOmXhjpVSyFq0l0e"))
+		assert.False(t, m.VerifySecret("aaCbOrw6I0vcoXzhnOmXhjpVSyFq0l0e"))
+		assert.False(t, m.VerifySecret(""))
+		assert.True(t, m.InvalidSecret("xcCbOrw6I0vcoXzhnOmXhjpVSyFq0l0e"))
+		assert.True(t, m.InvalidSecret("aaCbOrw6I0vcoXzhnOmXhjpVSyFq0l0e"))
+		assert.True(t, m.InvalidSecret(""))
 		assert.NotEmpty(t, m.CreatedAt)
 		assert.NotEmpty(t, m.UpdatedAt)
 	})
@@ -430,13 +430,13 @@ func TestClient_HasPassword(t *testing.T) {
 			t.Fatal("result should not be nil")
 		}
 
-		assert.Equal(t, expected.ClientUID, m.UID())
-		assert.True(t, m.HasSecret("xcCbOrw6I0vcoXzhnOmXhjpVSyFq0l0e"))
-		assert.False(t, m.HasSecret("aaCbOrw6I0vcoXzhnOmXhjpVSyFq0l0e"))
-		assert.False(t, m.HasSecret(""))
-		assert.False(t, m.WrongSecret("xcCbOrw6I0vcoXzhnOmXhjpVSyFq0l0e"))
-		assert.True(t, m.WrongSecret("aaCbOrw6I0vcoXzhnOmXhjpVSyFq0l0e"))
-		assert.True(t, m.WrongSecret(""))
+		assert.Equal(t, expected.ClientUID, m.GetUID())
+		assert.True(t, m.VerifySecret("xcCbOrw6I0vcoXzhnOmXhjpVSyFq0l0e"))
+		assert.False(t, m.VerifySecret("aaCbOrw6I0vcoXzhnOmXhjpVSyFq0l0e"))
+		assert.False(t, m.VerifySecret(""))
+		assert.False(t, m.InvalidSecret("xcCbOrw6I0vcoXzhnOmXhjpVSyFq0l0e"))
+		assert.True(t, m.InvalidSecret("aaCbOrw6I0vcoXzhnOmXhjpVSyFq0l0e"))
+		assert.True(t, m.InvalidSecret(""))
 		assert.NotEmpty(t, m.CreatedAt)
 		assert.NotEmpty(t, m.UpdatedAt)
 	})
@@ -497,13 +497,13 @@ func TestClient_UserInfo(t *testing.T) {
 
 func TestClient_AuthInfo(t *testing.T) {
 	t.Run("New", func(t *testing.T) {
-		assert.Equal(t, "Client Credentials (OAuth2)", NewClient().AuthInfo())
+		assert.Equal(t, "Client (OAuth2)", NewClient().AuthInfo())
 	})
 	t.Run("Alice", func(t *testing.T) {
-		assert.Equal(t, "Client Credentials (OAuth2)", ClientFixtures.Pointer("alice").AuthInfo())
+		assert.Equal(t, "Client (OAuth2)", ClientFixtures.Pointer("alice").AuthInfo())
 	})
 	t.Run("Metrics", func(t *testing.T) {
-		assert.Equal(t, "Client Credentials (OAuth2)", ClientFixtures.Pointer("metrics").AuthInfo())
+		assert.Equal(t, "Client (OAuth2)", ClientFixtures.Pointer("metrics").AuthInfo())
 	})
 }
 
@@ -526,7 +526,7 @@ func TestClient_SetFormValues(t *testing.T) {
 
 		var values = form.Client{
 			ClientName:   "New Name",
-			AuthProvider: authn.ProviderClientCredentials.String(),
+			AuthProvider: authn.ProviderClient.String(),
 			AuthMethod:   authn.MethodOAuth2.String(),
 			AuthScope:    "test",
 			AuthExpires:  4000,
@@ -550,7 +550,7 @@ func TestClient_SetFormValues(t *testing.T) {
 
 		var values = form.Client{
 			ClientName:   "Annika",
-			AuthProvider: authn.ProviderClientCredentials.String(),
+			AuthProvider: authn.ProviderClient.String(),
 			AuthMethod:   authn.MethodOAuth2.String(),
 			AuthScope:    "metrics",
 			AuthExpires:  -4000,
@@ -574,7 +574,7 @@ func TestClient_SetFormValues(t *testing.T) {
 
 		var values = form.Client{
 			ClientName:   "Friend",
-			AuthProvider: authn.ProviderClientCredentials.String(),
+			AuthProvider: authn.ProviderClient.String(),
 			AuthMethod:   authn.MethodOAuth2.String(),
 			AuthScope:    "test",
 			AuthExpires:  4000000,
@@ -614,7 +614,7 @@ func TestClient_SetFormValues(t *testing.T) {
 		assert.Equal(t, int64(3600), c.AuthExpires)
 		assert.Equal(t, "*", c.AuthScope)
 		assert.Equal(t, "oauth2", c.AuthMethod)
-		assert.Equal(t, "client_credentials", c.AuthProvider)
+		assert.Equal(t, "client", c.AuthProvider)
 
 	})
 }
@@ -624,7 +624,7 @@ func TestClient_Validate(t *testing.T) {
 		m := Client{
 			ClientName:   "test",
 			ClientType:   "test",
-			AuthProvider: authn.ProviderClientCredentials.String(),
+			AuthProvider: authn.ProviderClient.String(),
 			AuthMethod:   "basic",
 			AuthScope:    "all",
 		}
@@ -639,7 +639,7 @@ func TestClient_Validate(t *testing.T) {
 		m := Client{
 			ClientName:   "",
 			ClientType:   "test",
-			AuthProvider: authn.ProviderClientCredentials.String(),
+			AuthProvider: authn.ProviderClient.String(),
 			AuthMethod:   "basic",
 			AuthScope:    "all",
 		}
@@ -654,7 +654,7 @@ func TestClient_Validate(t *testing.T) {
 		m := Client{
 			ClientName:   "test",
 			ClientType:   "",
-			AuthProvider: authn.ProviderClientCredentials.String(),
+			AuthProvider: authn.ProviderClient.String(),
 			AuthMethod:   "basic",
 			AuthScope:    "all",
 		}
@@ -669,7 +669,7 @@ func TestClient_Validate(t *testing.T) {
 		m := Client{
 			ClientName:   "test",
 			ClientType:   "test",
-			AuthProvider: authn.ProviderClientCredentials.String(),
+			AuthProvider: authn.ProviderClient.String(),
 			AuthMethod:   "",
 			AuthScope:    "all",
 		}
@@ -684,7 +684,7 @@ func TestClient_Validate(t *testing.T) {
 		m := Client{
 			ClientName:   "test",
 			ClientType:   "test",
-			AuthProvider: authn.ProviderClientCredentials.String(),
+			AuthProvider: authn.ProviderClient.String(),
 			AuthMethod:   "basic",
 			AuthScope:    "",
 		}

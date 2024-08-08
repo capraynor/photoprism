@@ -5,16 +5,17 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/photoprism/photoprism/internal/acl"
-	"github.com/photoprism/photoprism/internal/get"
-	"github.com/photoprism/photoprism/internal/query"
+	"github.com/photoprism/photoprism/internal/auth/acl"
+	"github.com/photoprism/photoprism/internal/entity/query"
+	"github.com/photoprism/photoprism/internal/photoprism/get"
 	"github.com/photoprism/photoprism/pkg/clean"
 	"github.com/photoprism/photoprism/pkg/react"
 )
 
 // LikePhoto flags a photo as favorite.
 //
-// POST /api/v1/photos/:uid/like
+//	@Tags	Photos
+//	@Router	/api/v1/photos/{uid}/like [post]
 func LikePhoto(router *gin.RouterGroup) {
 	router.POST("/photos/:uid/like", func(c *gin.Context) {
 		s := AuthAny(c, acl.ResourcePhotos, acl.Permissions{acl.ActionUpdate, acl.ActionReact})
@@ -31,11 +32,11 @@ func LikePhoto(router *gin.RouterGroup) {
 			return
 		}
 
-		if get.Config().Experimental() && acl.Resources.Allow(acl.ResourcePhotos, s.UserRole(), acl.ActionReact) {
+		if get.Config().Experimental() && acl.Rules.Allow(acl.ResourcePhotos, s.UserRole(), acl.ActionReact) {
 			logWarn("react", m.React(s.User(), react.Find("love")))
 		}
 
-		if acl.Resources.Allow(acl.ResourcePhotos, s.UserRole(), acl.ActionUpdate) {
+		if acl.Rules.Allow(acl.ResourcePhotos, s.UserRole(), acl.ActionUpdate) {
 			err = m.SetFavorite(true)
 
 			if err != nil {
@@ -44,7 +45,7 @@ func LikePhoto(router *gin.RouterGroup) {
 				return
 			}
 
-			SavePhotoAsYaml(m)
+			SaveSidecarYaml(&m)
 			PublishPhotoEvent(StatusUpdated, id, c)
 		}
 
@@ -71,11 +72,11 @@ func DislikePhoto(router *gin.RouterGroup) {
 			return
 		}
 
-		if get.Config().Experimental() && acl.Resources.Allow(acl.ResourcePhotos, s.UserRole(), acl.ActionReact) {
+		if get.Config().Experimental() && acl.Rules.Allow(acl.ResourcePhotos, s.UserRole(), acl.ActionReact) {
 			logWarn("react", m.UnReact(s.User()))
 		}
 
-		if acl.Resources.Allow(acl.ResourcePhotos, s.UserRole(), acl.ActionUpdate) {
+		if acl.Rules.Allow(acl.ResourcePhotos, s.UserRole(), acl.ActionUpdate) {
 			err = m.SetFavorite(false)
 
 			if err != nil {
@@ -84,7 +85,7 @@ func DislikePhoto(router *gin.RouterGroup) {
 				return
 			}
 
-			SavePhotoAsYaml(m)
+			SaveSidecarYaml(&m)
 			PublishPhotoEvent(StatusUpdated, id, c)
 		}
 

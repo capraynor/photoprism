@@ -11,7 +11,7 @@ import Album from "../../page-model/album";
 import Settings from "../../page-model/settings";
 import Library from "../../page-model/library";
 
-fixture`Test settings`.page`${testcafeconfig.url}`.beforeEach(async (t) => {
+fixture`Test general settings`.page`${testcafeconfig.url}`.beforeEach(async (t) => {
   await page.login("admin", "photoprism");
 });
 
@@ -395,6 +395,8 @@ test.meta("testID", "settings-general-006").meta({ type: "short", mode: "auth" }
     await photoviewer.checkPhotoViewerActionAvailability("download", true);
 
     await photoviewer.triggerPhotoViewerAction("close");
+    await t.expect(Selector("#photo-viewer").visible).notOk();
+
     await menu.openPage("settings");
 
     await t
@@ -480,6 +482,7 @@ test.meta("testID", "settings-general-006").meta({ type: "short", mode: "auth" }
     await photoviewer.checkPhotoViewerActionAvailability("download", false);
     await photoviewer.checkPhotoViewerActionAvailability("edit", false);
     await photoviewer.triggerPhotoViewerAction("close");
+    await t.expect(Selector("#photo-viewer").visible).notOk();
 
     await menu.openPage("settings");
     await t

@@ -3,7 +3,6 @@ package workers
 import (
 	"errors"
 	"fmt"
-	"runtime"
 	"runtime/debug"
 	"time"
 
@@ -11,15 +10,14 @@ import (
 
 	"github.com/photoprism/photoprism/internal/config"
 	"github.com/photoprism/photoprism/internal/entity"
+	"github.com/photoprism/photoprism/internal/entity/query"
 	"github.com/photoprism/photoprism/internal/mutex"
 	"github.com/photoprism/photoprism/internal/photoprism"
-	"github.com/photoprism/photoprism/internal/query"
 )
 
 // Meta represents a background index and metadata optimization worker.
 type Meta struct {
-	conf    *config.Config
-	lastRun time.Time
+	conf *config.Config
 }
 
 // NewMeta returns a new Meta worker.
@@ -48,7 +46,7 @@ func (w *Meta) Start(delay, interval time.Duration, force bool) (err error) {
 	defer mutex.MetaWorker.Stop()
 
 	// Check time when worker was last executed.
-	updateIndex := force || w.lastRun.Before(time.Now().Add(-1*entity.IndexUpdateInterval))
+	updateIndex := force || mutex.MetaWorker.LastRun().Before(time.Now().Add(-1*entity.IndexUpdateInterval))
 
 	// Run faces worker if needed.
 	if updateIndex || entity.UpdateFaces.Load() {
@@ -71,10 +69,10 @@ func (w *Meta) Start(delay, interval time.Duration, force bool) (err error) {
 	optimized := 0
 
 	for {
-		photos, err := query.PhotosMetadataUpdate(limit, offset, delay, interval)
+		photos, queryErr := query.PhotosMetadataUpdate(limit, offset, delay, interval)
 
-		if err != nil {
-			return err
+		if queryErr != nil {
+			return queryErr
 		}
 
 		if len(photos) == 0 {
@@ -92,10 +90,10 @@ func (w *Meta) Start(delay, interval time.Duration, force bool) (err error) {
 
 			done[photo.PhotoUID] = true
 
-			updated, merged, err := photo.Optimize(settings.StackMeta(), settings.StackUUID(), settings.Features.Estimates, force)
+			updated, merged, optimizeErr := photo.Optimize(settings.StackMeta(), settings.StackUUID(), settings.Features.Estimates, force)
 
-			if err != nil {
-				log.Errorf("index: %s in optimization worker", err)
+			if optimizeErr != nil {
+				log.Errorf("index: %s in optimization worker", optimizeErr)
 			} else if updated {
 				optimized++
 				log.Debugf("index: updated photo %s", photo.String())
@@ -128,7 +126,7 @@ func (w *Meta) Start(delay, interval time.Duration, force bool) (err error) {
 
 		// Run moments worker.
 		if moments := photoprism.NewMoments(w.conf); moments == nil {
-			log.Errorf("index: failed updating moments")
+			log.Errorf("index: failed to update moments")
 		} else if err = moments.Start(); err != nil {
 			log.Warnf("moments: %s in optimization worker", err)
 		}
@@ -143,12 +141,6 @@ func (w *Meta) Start(delay, interval time.Duration, force bool) (err error) {
 			log.Warnf("index: %s in optimization worker", err)
 		}
 	}
-
-	// Update time when worker was last executed.
-	w.lastRun = entity.TimeStamp()
-
-	// Run garbage collection.
-	runtime.GC()
 
 	return nil
 }

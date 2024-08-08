@@ -7,8 +7,8 @@ import (
 	"github.com/urfave/cli"
 
 	"github.com/photoprism/photoprism/internal/config"
-	"github.com/photoprism/photoprism/internal/query"
-	"github.com/photoprism/photoprism/pkg/report"
+	"github.com/photoprism/photoprism/internal/entity/query"
+	"github.com/photoprism/photoprism/pkg/txt/report"
 )
 
 // ClientsListCommand configures the command name, flags, and action.
@@ -59,7 +59,7 @@ func clientsListAction(ctx *cli.Context) error {
 			}
 
 			rows[i] = []string{
-				client.UID(),
+				client.GetUID(),
 				client.Name(),
 				client.AuthInfo(),
 				client.UserInfo(),

@@ -8,6 +8,7 @@ import (
 )
 
 var APIv1 *gin.RouterGroup
+var registerApiDocs func(router *gin.RouterGroup)
 
 // registerRoutes registers the routes for handling HTTP requests with the built-in web server.
 func registerRoutes(router *gin.Engine, conf *config.Config) {
@@ -33,27 +34,45 @@ func registerRoutes(router *gin.Engine, conf *config.Config) {
 	// Register JSON REST-API version 1 (APIv1) routes, grouped by functionality.
 	// Docs: https://pkg.go.dev/github.com/photoprism/photoprism/internal/api
 
-	// Authentication.
+	// API Documentation.
+	if registerApiDocs != nil {
+		registerApiDocs(APIv1)
+	}
+
+	// User Sessions.
 	api.CreateSession(APIv1)
 	api.GetSession(APIv1)
 	api.DeleteSession(APIv1)
-	api.CreateOAuthToken(APIv1)
-	api.RevokeOAuthToken(APIv1)
 
-	// Server Config.
+	// OAuth2 Client Endpoints.
+	api.OAuthAuthorize(APIv1)
+	api.OAuthUserinfo(APIv1)
+	api.OAuthToken(APIv1)
+	api.OAuthRevoke(APIv1)
+
+	// OIDC Client Endpoints.
+	api.OIDCLogin(APIv1)
+	api.OIDCRedirect(APIv1)
+
+	// Global Configuration.
 	api.GetConfigOptions(APIv1)
 	api.SaveConfigOptions(APIv1)
 	api.StopServer(APIv1)
 
-	// Custom Settings.
+	// User Settings.
 	api.GetClientConfig(APIv1)
 	api.GetSettings(APIv1)
 	api.SaveSettings(APIv1)
 
-	// Profile and Uploads.
+	// User Profile and Uploads.
 	api.UploadUserFiles(APIv1)
 	api.ProcessUserUpload(APIv1)
 	api.UploadUserAvatar(APIv1)
+	api.FindUserSessions(APIv1)
+	api.CreateUserPasscode(APIv1)
+	api.ConfirmUserPasscode(APIv1)
+	api.ActivateUserPasscode(APIv1)
+	api.DeactivateUserPasscode(APIv1)
 	api.UpdateUserPassword(APIv1)
 	api.UpdateUser(APIv1)
 

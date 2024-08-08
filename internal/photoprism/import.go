@@ -76,12 +76,12 @@ func (imp *Import) Start(opt ImportOptions) fs.Done {
 
 	// Make sure to run import only once, unless otherwise requested.
 	if !opt.NonBlocking {
-		if err := mutex.MainWorker.Start(); err != nil {
+		if err := mutex.IndexWorker.Start(); err != nil {
 			event.Warn(fmt.Sprintf("import: %s", err.Error()))
 			return done
 		}
 
-		defer mutex.MainWorker.Stop()
+		defer mutex.IndexWorker.Stop()
 	}
 
 	if err := ind.tensorFlow.Init(); err != nil {
@@ -93,7 +93,7 @@ func (imp *Import) Start(opt ImportOptions) fs.Done {
 
 	// Start a fixed number of goroutines to import files.
 	var wg sync.WaitGroup
-	var numWorkers = imp.conf.Workers()
+	var numWorkers = imp.conf.IndexWorkers()
 	wg.Add(numWorkers)
 	for i := 0; i < numWorkers; i++ {
 		go func() {
@@ -112,7 +112,7 @@ func (imp *Import) Start(opt ImportOptions) fs.Done {
 	skipRaw := imp.conf.DisableRaw()
 	ignore := fs.NewIgnoreList(fs.PPIgnoreFilename, true, false)
 
-	if err := ignore.Dir(importPath); err != nil {
+	if err := ignore.Path(importPath); err != nil {
 		log.Infof("import: %s", err)
 	}
 
@@ -131,7 +131,7 @@ func (imp *Import) Start(opt ImportOptions) fs.Done {
 				}
 			}()
 
-			if mutex.MainWorker.Canceled() {
+			if mutex.IndexWorker.Canceled() {
 				return errors.New("canceled")
 			}
 
@@ -147,7 +147,7 @@ func (imp *Import) Start(opt ImportOptions) fs.Done {
 					directories = append(directories, fileName)
 				}
 
-				folder := entity.NewFolder(entity.RootImport, fs.RelName(fileName, imp.conf.ImportPath()), fs.BirthTime(fileName))
+				folder := entity.NewFolder(entity.RootImport, fs.RelName(fileName, imp.conf.ImportPath()), fs.ModTime(fileName))
 
 				if err := folder.Create(); err == nil {
 					log.Infof("import: added folder /%s", folder.Path)
@@ -178,16 +178,22 @@ func (imp *Import) Start(opt ImportOptions) fs.Done {
 				return nil
 			}
 
+			// Report files that have a missing or invalid filename extension,
+			// see https://github.com/photoprism/photoprism/issues/3518.
+			if typeErr := mf.CheckType(); typeErr != nil {
+				log.Warnf("import: %s has %s", clean.Log(mf.RootRelName()), typeErr)
+			}
+
 			// Create JSON sidecar file, if needed.
 			if err = mf.CreateExifToolJson(imp.convert); err != nil {
-				log.Errorf("import: %s", clean.Error(err))
+				log.Warnf("import: %s", clean.Error(err))
 			}
 
 			// Find related files to import.
 			related, err := mf.RelatedFiles(imp.conf.Settings().StackSequences())
 
 			if err != nil {
-				event.Error(fmt.Sprintf("import: %s", clean.Error(err)))
+				event.Error(fmt.Sprintf("import: %s", err))
 				return nil
 			}
 
@@ -233,7 +239,7 @@ func (imp *Import) Start(opt ImportOptions) fs.Done {
 		for _, directory := range directories {
 			if fs.DirIsEmpty(directory) {
 				if err := os.Remove(directory); err != nil {
-					log.Errorf("import: failed deleting empty folder %s (%s)", clean.Log(fs.RelName(directory, importPath)), err)
+					log.Errorf("import: failed to delete empty folder %s (%s)", clean.Log(fs.RelName(directory, importPath)), err)
 				} else {
 					log.Infof("import: deleted empty folder %s", clean.Log(fs.RelName(directory, importPath)))
 				}
@@ -279,7 +285,7 @@ func (imp *Import) Start(opt ImportOptions) fs.Done {
 
 // Cancel stops the current import operation.
 func (imp *Import) Cancel() {
-	mutex.MainWorker.Cancel()
+	mutex.IndexWorker.Cancel()
 }
 
 // DestinationFilename returns the destination filename of a MediaFile to be imported.

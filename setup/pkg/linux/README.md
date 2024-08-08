@@ -2,9 +2,9 @@
 
 As an alternative to our [Docker images](https://docs.photoprism.app/getting-started/docker-compose/), you can use the packages available at [**dl.photoprism.app/pkg/linux/**](https://dl.photoprism.app/pkg/linux/) to install PhotoPrism on compatible Linux distributions without [building it from source](https://docs.photoprism.app/getting-started/faq/#building-from-source).
 
-We recommend that **only experienced users** choose this installation method, since these packages [need to be set up manually](#configuration) and [do not include the system dependencies](#dependencies) required to make use of all the features.
+These [binary installation packages](https://dl.photoprism.app/pkg/linux/) are intended for **experienced users** and **maintainers of third-party integrations** only, as they [require manual configuration](#configuration) and [do not include tested system dependencies](#dependencies). Since we are unable to [provide support](https://www.photoprism.app/kb/getting-support) for custom installations, we recommend using [one of our Docker images](https://docs.photoprism.app/getting-started/docker-compose/) to run PhotoPrism on a private server or NAS device.
 
-Also note that the minimum required glibc version is 2.35, so for example Ubuntu 22.04 and Debian Bookworm will work with these binaries, but older Linux distributions may not be compatible.
+Also note that the minimum required glibc version is 2.35, so for example Ubuntu 22.04 and Debian Bookworm will work, but older Linux distributions may not be compatible.
 
 ## Usage
 
@@ -26,37 +26,41 @@ Since the packages currently do not include a default configuration, we recommen
 
 ### *.deb* Packages for Ubuntu / Debian Linux
 
-As an alternative to the plain *tar.gz* archives, that you need to unpack manually, we also offer *.deb* packages for Debian-based distributions such as Ubuntu Linux.
+As an alternative to the plain *tar.gz* archives, that you need to unpack manually, we also offer *.deb* packages for Debian-based distributions such as Ubuntu Linux. Note that these packages are not fully mature yet and will install `-dev` packages to satisfy library dependencies. This may result in more packages being installed than are actually needed in production environments.
 
 On servers with a **64-bit Intel or AMD CPU**, our [latest stable release](https://github.com/photoprism/photoprism/releases) can be installed as follows:
 
 ```
 curl -sLO https://dl.photoprism.app/pkg/linux/deb/amd64.deb
-sudo dpkg -i amd64.deb
+sudo apt install --no-install-recommends ./amd64.deb
 ```
 
 If your server has an **ARM-based CPU**, such as a [Raspberry Pi](https://docs.photoprism.app/getting-started/raspberry-pi/), use the following commands instead:
 
 ```
 curl -sLO https://dl.photoprism.app/pkg/linux/deb/arm64.deb
-sudo dpkg -i arm64.deb
+sudo apt install --no-install-recommends ./arm64.deb
 ```
 
-This will install PhotoPrism to `/opt/photoprism` and add a `/usr/local/bin/photoprism` symlink for the CLI command.
+This installs PhotoPrism to `/opt/photoprism`, adds a `/usr/local/bin/photoprism` symlink for the CLI command, an `/etc/photoprism/defaults.yml` file and the required system dependencies (omit `--no-install-recommends` to also install MariaDB, Darktable, and RawTherapee).
 
-Since the packages currently do not include a default configuration, we recommend that you create a [`defaults.yml`](https://docs.photoprism.app/getting-started/config-files/defaults/) in `/etc/photoprism` next, in which you configure the paths and other settings that you want to use for your instance.
+### AUR Packages for Arch Linux
+
+Thomas Eizinger additionally maintains [AUR packages for installation on Arch Linux](https://aur.archlinux.org/packages/photoprism-bin). They are based on our *tar.gz* packages and have a systemd integration so that PhotoPrism can be started and restarted automatically.
+
+[Learn more ›](https://aur.archlinux.org/packages/photoprism-bin)
 
 ## Updates
 
 To update your installation, please stop all running PhotoPrism instances and make sure that there are [no media, database, or custom config files](#configuration) in the `/opt/photoprism` directory. You can then delete its contents with the command `sudo rm -rf /opt/photoprism/*` and install a new version as shown above.
 
-If you used a *.deb* package for the installation, you may need to remove the currently installed `photoprism` package by running `sudo dpkg -r photoprism` before you can install a new version with `sudo dpkg -i package.deb`. This is a known issue that we hope to resolve with improved packages.
+If you have used a *.deb* package for installation, you may need to remove the currently installed `photoprism` package by running `sudo dpkg -r photoprism` before you can install a new version with `sudo apt install ./package.deb` or `sudo dpkg -i package.deb`.
 
 ## Dependencies
 
-In order to use all PhotoPrism features and have [full file format support](https://www.photoprism.app/kb/file-formats), additional system dependencies **must be installed** as they are not included in the packages we provide, for example exiftool, darktable, rawtherapee, [libheif](https://dl.photoprism.app/dist/libheif/README.html), imagemagick, ffmpeg, libavcodec-extra, mariadb, sqlite3, and tzdata. The actual names may vary depending on what distribution you use.
+In order to use all PhotoPrism features and have [full file format support](https://www.photoprism.app/kb/file-formats), additional system dependencies **must be installed** as they are not included in the packages we provide, for example exiftool, darktable, rawtherapee, [libheif](https://dl.photoprism.app/dist/libheif/README.html), imagemagick, libvips, libjxl, libjxl-tools, ffmpeg, libavcodec-extra, libde265, libaom, libvpx, libwebm, mariadb, sqlite3, and tzdata. The actual names may vary depending on what distribution you use.
 
-For details on the packages installed in our official Docker images, see <https://github.com/photoprism/photoprism/tree/develop/docker/develop>.
+Keep in mind that even if all dependencies are installed, it is possible that you are using a version that is not fully compatible with your pictures, phone, or camera. Our team cannot [provide support](https://www.photoprism.app/kb/getting-support) in these cases if the same issue does not occur with our [official Docker images](https://docs.photoprism.app/getting-started/docker-compose/). Details on the packages and package versions we use can be found in the Dockerfiles available in our [public project repository](https://github.com/photoprism/photoprism/tree/develop/docker).
 
 ## Configuration
 
@@ -66,7 +70,7 @@ Global config defaults [can be defined in a `/etc/photoprism/defaults.yml` file]
 
 If no explicit *originals*, *import* and/or *assets* path has been configured, a list of [default directory paths](https://github.com/photoprism/photoprism/blob/develop/pkg/fs/dirs.go) will be searched and the first existing directory will be used for the respective path. To simplify [updates](#updates), we recommend **not to store** any media, database, or custom config files in the same directory where you installed PhotoPrism, e.g. `/opt/photoprism`, and to use a different base directory for them instead, for example `/photoprism`, `/var/lib/photoprism`, or a path relative to each user's home directory.
 
-Please keep in mind that any changes to the config options, either [through the UI](https://docs.photoprism.app/user-guide/settings/advanced/), [config files](https://docs.photoprism.app/getting-started/config-files/), or by [setting environment variables](https://docs.photoprism.app/getting-started/config-options/), require a restart to take effect.
+Note that all configuration changes, either [via UI](https://docs.photoprism.app/user-guide/settings/advanced/), [config files](https://docs.photoprism.app/getting-started/config-files/) or by [setting environment variables](https://docs.photoprism.app/getting-started/config-options/), **require a restart** to take effect.
 
 ### `defaults.yml`
 

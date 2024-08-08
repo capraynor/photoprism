@@ -3,7 +3,7 @@ package wellknown
 import (
 	"fmt"
 
-	"github.com/photoprism/photoprism/internal/acl"
+	"github.com/photoprism/photoprism/internal/auth/acl"
 	"github.com/photoprism/photoprism/internal/config"
 )
 
@@ -39,9 +39,9 @@ type OpenIDConfiguration struct {
 func NewOpenIDConfiguration(conf *config.Config) *OpenIDConfiguration {
 	return &OpenIDConfiguration{
 		Issuer:                                    conf.SiteUrl(),
-		AuthorizationEndpoint:                     "",
+		AuthorizationEndpoint:                     fmt.Sprintf("%sapi/v1/oauth/authorize", conf.SiteUrl()),
 		TokenEndpoint:                             fmt.Sprintf("%sapi/v1/oauth/token", conf.SiteUrl()),
-		UserinfoEndpoint:                          "",
+		UserinfoEndpoint:                          fmt.Sprintf("%sapi/v1/oauth/userinfo", conf.SiteUrl()),
 		RegistrationEndpoint:                      "",
 		JwksUri:                                   "",
 		ResponseTypesSupported:                    OAuthResponseTypes,
@@ -49,7 +49,7 @@ func NewOpenIDConfiguration(conf *config.Config) *OpenIDConfiguration {
 		GrantTypesSupported:                       OAuthGrantTypes,
 		SubjectTypesSupported:                     []string{},
 		IdTokenSigningAlgValuesSupported:          []string{},
-		ScopesSupported:                           acl.Resources.Resources(),
+		ScopesSupported:                           acl.Rules.Resources(),
 		TokenEndpointAuthMethodsSupported:         OAuthTokenEndpointAuthMethods,
 		ClaimsSupported:                           []string{},
 		CodeChallengeMethodsSupported:             []string{},

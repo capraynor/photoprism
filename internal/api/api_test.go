@@ -14,7 +14,7 @@ import (
 	"github.com/photoprism/photoprism/internal/config"
 	"github.com/photoprism/photoprism/internal/event"
 	"github.com/photoprism/photoprism/internal/form"
-	"github.com/photoprism/photoprism/internal/get"
+	"github.com/photoprism/photoprism/internal/photoprism/get"
 	"github.com/photoprism/photoprism/internal/server/limiter"
 	"github.com/photoprism/photoprism/pkg/header"
 )
@@ -41,15 +41,13 @@ func TestMain(m *testing.M) {
 	// Init test config.
 	c := config.TestConfig()
 	get.SetConfig(c)
+	defer c.CloseDb()
 
 	// Increase login rate limit for testing.
 	limiter.Login = limiter.NewLimit(1, 10000)
 
 	// Run unit tests.
 	code := m.Run()
-
-	// Close database connection.
-	_ = c.CloseDb()
 
 	os.Exit(code)
 }
@@ -103,11 +101,11 @@ func AuthenticateAdmin(app *gin.Engine, router *gin.RouterGroup) (authToken stri
 
 // AuthenticateUser Register session routes and returns valid SessionId.
 // Call this func after registering other routes and before performing other requests.
-func AuthenticateUser(app *gin.Engine, router *gin.RouterGroup, name string, password string) (authToken string) {
+func AuthenticateUser(app *gin.Engine, router *gin.RouterGroup, username string, password string) (authToken string) {
 	CreateSession(router)
 
 	r := PerformRequestWithBody(app, http.MethodPost, "/api/v1/session", form.AsJson(form.Login{
-		UserName: name,
+		Username: username,
 		Password: password,
 	}))
 

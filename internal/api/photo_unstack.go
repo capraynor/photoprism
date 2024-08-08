@@ -7,14 +7,14 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/photoprism/photoprism/internal/acl"
+	"github.com/photoprism/photoprism/internal/auth/acl"
 	"github.com/photoprism/photoprism/internal/entity"
+	"github.com/photoprism/photoprism/internal/entity/query"
 	"github.com/photoprism/photoprism/internal/event"
-	"github.com/photoprism/photoprism/internal/get"
-	"github.com/photoprism/photoprism/internal/i18n"
 	"github.com/photoprism/photoprism/internal/photoprism"
-	"github.com/photoprism/photoprism/internal/query"
+	"github.com/photoprism/photoprism/internal/photoprism/get"
 	"github.com/photoprism/photoprism/pkg/clean"
+	"github.com/photoprism/photoprism/pkg/i18n"
 )
 
 // PhotoUnstack removes a file from an existing photo stack.
@@ -22,9 +22,11 @@ import (
 // The request parameters are:
 //
 //   - uid: string Photo UID as returned by the API
+//
 //   - file_uid: string File UID as returned by the API
 //
-// POST /api/v1/photos/:uid/files/:file_uid/unstack
+//     @Tags	Photos
+//     @Router	/api/v1/photos/{uid}/files/{file_uid}/unstack [post]
 func PhotoUnstack(router *gin.RouterGroup) {
 	router.POST("/photos/:uid/files/:file_uid/unstack", func(c *gin.Context) {
 		s := Auth(c, acl.ResourcePhotos, acl.ActionUpdate)
@@ -96,7 +98,7 @@ func PhotoUnstack(router *gin.RouterGroup) {
 			AbortEntityNotFound(c)
 			return
 		} else if related.Main == nil {
-			log.Errorf("photo: found no main file for %s (unstack)", clean.Log(baseName))
+			log.Errorf("photo: found no main media file for %s (unstack)", clean.Log(baseName))
 			AbortEntityNotFound(c)
 			return
 		}

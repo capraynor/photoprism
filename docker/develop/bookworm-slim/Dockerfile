@@ -30,6 +30,7 @@ ENV PHOTOPRISM_ARCH=$TARGETARCH \
     TMPDIR="/tmp" \
     DEBIAN_FRONTEND="noninteractive" \
     TF_CPP_MIN_LOG_LEVEL="2" \
+    MALLOC_ARENA_MAX="4" \
     PROG="photoprism"
 
 # Copy scripts and package sources config.
@@ -49,15 +50,14 @@ RUN echo 'APT::Acquire::Retries "3";' > /etc/apt/apt.conf.d/80retries && \
       gpg zip unzip wget curl rsync make nano \
       jq lsof lshw sqlite3 mariadb-client imagemagick libvips-dev \
       exiftool darktable rawtherapee libheif-examples librsvg2-bin \
-      ffmpeg libavcodec-extra x264 x265 libvpx7 libwebm1 \
-      libmatroska7 libdvdread8 libebml5 libgav1-bin libatomic1 \
+      ffmpeg libavcodec-extra libdav1d-dev x264 x265 libvpx-dev libwebm-dev \
+      libmatroska-dev libdvdread-dev libebml5 libgav1-bin libatomic1 \
     && \
     echo 'alias ll="ls -alh"' >> /etc/skel/.bashrc && \
     echo 'export PS1="\u@$DOCKER_TAG:\w\$ "' >> /etc/skel/.bashrc && \
     echo "ALL ALL=(ALL) NOPASSWD:SETENV: /scripts/entrypoint-init.sh" >> /etc/sudoers.d/init && \
     cp /etc/skel/.bashrc /root/.bashrc && \
     /scripts/create-users.sh && \
-    cp /scripts/heif-convert.sh /usr/local/bin/heif-convert && \
     install -d -m 0777 -o 1000 -g 1000 \
       /photoprism/originals \
       /photoprism/import \

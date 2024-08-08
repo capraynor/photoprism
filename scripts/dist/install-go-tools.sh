@@ -39,8 +39,11 @@ mkdir -p "$GOPATH/src"
 # Install remaining tools in "/usr/local/bin".
 case $DESTARCH in
   arm | ARM | aarch | armv7l | armhf)
-    # no additional tools on ARMv7 to reduce build time
-    echo "Skipping installation of Go tools."
+    echo "Installing Go tools for ${DESTARCH^^} in /usr/local/bin..."
+    GOBIN="/usr/local/bin" go install golang.org/x/tools/cmd/goimports@latest
+    GOBIN="/usr/local/bin" go install github.com/psampaz/go-mod-outdated@latest
+    GOBIN="/usr/local/bin" go install github.com/kyoh86/richgo@latest
+    GOBIN="/usr/local/bin" go install github.com/goreleaser/nfpm/v2/cmd/nfpm@latest
     ;;
 
   *)
@@ -53,6 +56,8 @@ case $DESTARCH in
     GOBIN="/usr/local/bin" go install github.com/muesli/duf@latest
     GOBIN="/usr/local/bin" go install github.com/go-delve/delve/cmd/dlv@latest
     GOBIN="/usr/local/bin" go install github.com/goreleaser/nfpm/v2/cmd/nfpm@latest
+    GOBIN="/usr/local/bin" go install github.com/google/go-licenses@latest
+    GOBIN="/usr/local/bin" go install github.com/swaggo/swag/cmd/swag@latest
     ;;
 esac
 

@@ -11,16 +11,16 @@ import (
 
 	"github.com/karrick/godirwalk"
 
-	"github.com/photoprism/photoprism/internal/classify"
+	"github.com/photoprism/photoprism/internal/ai/classify"
+	"github.com/photoprism/photoprism/internal/ai/face"
+	"github.com/photoprism/photoprism/internal/ai/nsfw"
 	"github.com/photoprism/photoprism/internal/config"
 	"github.com/photoprism/photoprism/internal/entity"
 	"github.com/photoprism/photoprism/internal/event"
-	"github.com/photoprism/photoprism/internal/face"
-	"github.com/photoprism/photoprism/internal/i18n"
 	"github.com/photoprism/photoprism/internal/mutex"
-	"github.com/photoprism/photoprism/internal/nsfw"
 	"github.com/photoprism/photoprism/pkg/clean"
 	"github.com/photoprism/photoprism/pkg/fs"
+	"github.com/photoprism/photoprism/pkg/i18n"
 	"github.com/photoprism/photoprism/pkg/media"
 )
 
@@ -71,7 +71,7 @@ func (ind *Index) thumbPath() string {
 
 // Cancel stops the current indexing operation.
 func (ind *Index) Cancel() {
-	mutex.MainWorker.Cancel()
+	mutex.IndexWorker.Cancel()
 }
 
 // Start indexes media files in the "originals" folder.
@@ -100,12 +100,12 @@ func (ind *Index) Start(o IndexOptions) (found fs.Done, updated int) {
 		return found, updated
 	}
 
-	if err := mutex.MainWorker.Start(); err != nil {
+	if err := mutex.IndexWorker.Start(); err != nil {
 		event.Warn(fmt.Sprintf("index: %s", err.Error()))
 		return found, updated
 	}
 
-	defer mutex.MainWorker.Stop()
+	defer mutex.IndexWorker.Stop()
 
 	if err := ind.tensorFlow.Init(); err != nil {
 		log.Errorf("index: %s", clean.Error(err))
@@ -117,7 +117,7 @@ func (ind *Index) Start(o IndexOptions) (found fs.Done, updated int) {
 
 	// Start a fixed number of goroutines to index files.
 	var wg sync.WaitGroup
-	var numWorkers = ind.conf.Workers()
+	var numWorkers = ind.conf.IndexWorkers()
 	wg.Add(numWorkers)
 	for i := 0; i < numWorkers; i++ {
 		go func() {
@@ -135,8 +135,8 @@ func (ind *Index) Start(o IndexOptions) (found fs.Done, updated int) {
 	skipRaw := ind.conf.DisableRaw()
 	ignore := fs.NewIgnoreList(fs.PPIgnoreFilename, true, false)
 
-	if err := ignore.Dir(originalsPath); err != nil {
-		log.Infof("index: %s", clean.Error(err))
+	if err := ignore.Path(originalsPath); err != nil {
+		log.Infof("index: %s", err)
 	}
 
 	ignore.Log = func(fileName string) {
@@ -154,7 +154,7 @@ func (ind *Index) Start(o IndexOptions) (found fs.Done, updated int) {
 				}
 			}()
 
-			if mutex.MainWorker.Canceled() {
+			if mutex.IndexWorker.Canceled() {
 				return errors.New("canceled")
 			}
 
@@ -169,7 +169,7 @@ func (ind *Index) Start(o IndexOptions) (found fs.Done, updated int) {
 				}
 
 				if !errors.Is(result, filepath.SkipDir) {
-					folder := entity.NewFolder(entity.RootOriginals, relName, fs.BirthTime(fileName))
+					folder := entity.NewFolder(entity.RootOriginals, relName, fs.ModTime(fileName))
 
 					if err := folder.Create(); err == nil {
 						log.Infof("index: added folder /%s", folder.Path)
@@ -219,16 +219,23 @@ func (ind *Index) Start(o IndexOptions) (found fs.Done, updated int) {
 				return nil
 			}
 
+			// Skip files if the filename extension does not match their mime type,
+			// see https://github.com/photoprism/photoprism/issues/3518 for details.
+			if typeErr := mf.CheckType(); typeErr != nil {
+				log.Warnf("index: skipped %s due to %s", clean.Log(mf.RootRelName()), typeErr)
+				return nil
+			}
+
 			// Create JSON sidecar file, if needed.
 			if err = mf.CreateExifToolJson(ind.convert); err != nil {
-				log.Errorf("index: %s", clean.Error(err))
+				log.Warnf("index: %s", err)
 			}
 
 			// Find related files to index.
 			related, err := mf.RelatedFiles(ind.conf.Settings().StackSequences())
 
 			if err != nil {
-				log.Warnf("index: %s", clean.Error(err))
+				log.Warnf("index: %s", err)
 				return nil
 			}
 
@@ -323,7 +330,7 @@ func (ind *Index) Start(o IndexOptions) (found fs.Done, updated int) {
 
 	runtime.GC()
 
-	ind.lastRun = entity.TimeStamp()
+	ind.lastRun = entity.Now()
 	ind.lastFound = len(found)
 
 	return found, updated

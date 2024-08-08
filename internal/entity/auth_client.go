@@ -9,14 +9,14 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jinzhu/gorm"
 
-	"github.com/photoprism/photoprism/internal/acl"
+	"github.com/photoprism/photoprism/internal/auth/acl"
 	"github.com/photoprism/photoprism/internal/event"
 	"github.com/photoprism/photoprism/internal/form"
 	"github.com/photoprism/photoprism/pkg/authn"
 	"github.com/photoprism/photoprism/pkg/clean"
-	"github.com/photoprism/photoprism/pkg/report"
 	"github.com/photoprism/photoprism/pkg/rnd"
-	"github.com/photoprism/photoprism/pkg/unix"
+	"github.com/photoprism/photoprism/pkg/time/unix"
+	"github.com/photoprism/photoprism/pkg/txt/report"
 )
 
 // ClientUID is the unique ID prefix.
@@ -63,7 +63,7 @@ func NewClient() *Client {
 		ClientType:   authn.ClientConfidential,
 		ClientURL:    "",
 		CallbackURL:  "",
-		AuthProvider: authn.ProviderClientCredentials.String(),
+		AuthProvider: authn.ProviderClient.String(),
 		AuthMethod:   authn.MethodOAuth2.String(),
 		AuthScope:    "",
 		AuthExpires:  unix.Hour,
@@ -100,8 +100,8 @@ func FindClientByUID(uid string) *Client {
 	return m
 }
 
-// UID returns the client uid string.
-func (m *Client) UID() string {
+// GetUID returns the client uid string.
+func (m *Client) GetUID() string {
 	return m.ClientUID
 }
 
@@ -110,8 +110,8 @@ func (m *Client) HasUID() bool {
 	return rnd.IsUID(m.ClientUID, ClientUID)
 }
 
-// NoUID tests if the client does not have a valid uid.
-func (m *Client) NoUID() bool {
+// InvalidUID tests if the client does not have a valid uid.
+func (m *Client) InvalidUID() bool {
 	return !m.HasUID()
 }
 
@@ -135,7 +135,7 @@ func (m *Client) String() string {
 	if m == nil {
 		return report.NotAssigned
 	} else if m.HasUID() {
-		return m.UID()
+		return m.GetUID()
 	} else if m.HasName() {
 		return m.Name()
 	}
@@ -271,7 +271,7 @@ func (m *Client) Save() error {
 // Delete marks the entity as deleted.
 func (m *Client) Delete() (err error) {
 	if m.ClientUID == "" {
-		return fmt.Errorf("client uid is missing")
+		return fmt.Errorf("client uid is empty")
 	}
 
 	if _, err = m.DeleteSessions(); err != nil {
@@ -286,7 +286,7 @@ func (m *Client) Delete() (err error) {
 // DeleteSessions deletes all sessions that belong to this client.
 func (m *Client) DeleteSessions() (deleted int, err error) {
 	if m.ClientUID == "" {
-		return 0, fmt.Errorf("client uid is missing")
+		return 0, fmt.Errorf("client uid is empty")
 	}
 
 	if deleted = DeleteClientSessions(m, "", 0); deleted > 0 {
@@ -351,32 +351,37 @@ func (m *Client) SetSecret(secret string) (err error) {
 	return nil
 }
 
-// HasSecret checks if the given client secret is correct.
-func (m *Client) HasSecret(s string) bool {
-	return !m.WrongSecret(s)
+// VerifySecret checks if the given client secret is correct.
+func (m *Client) VerifySecret(s string) bool {
+	return !m.InvalidSecret(s)
 }
 
-// WrongSecret checks if the given client secret is incorrect.
-func (m *Client) WrongSecret(s string) bool {
+// InvalidSecret checks if the given client secret is invalid.
+func (m *Client) InvalidSecret(s string) bool {
+	// Check client UID.
 	if !m.HasUID() {
+		// Invalid, ID is missing.
 		return true
 	}
 
-	// Empty secret?
+	// Check if secret is empty.
 	if s == "" {
+		// Invalid, no secret provided.
 		return true
 	}
 
-	// Fetch secret.
+	// Find secret.
 	pw := FindPassword(m.ClientUID)
 
 	// Found?
 	if pw == nil {
+		// Invalid, not found.
 		return true
 	}
 
-	// Invalid?
-	if pw.IsWrong(s) {
+	// Matches?
+	if pw.Invalid(s) {
+		// Invalid, does not match.
 		return true
 	}
 
@@ -422,25 +427,31 @@ func (m *Client) SetScope(s string) *Client {
 	return m
 }
 
-// UpdateLastActive sets the last activity of the client to now.
-func (m *Client) UpdateLastActive() *Client {
-	if !m.HasUID() {
+// UpdateLastActive sets the time of last activity to now and optionally also updates the auth_clients table.
+func (m *Client) UpdateLastActive(save bool) *Client {
+	if m == nil {
+		return &Client{}
+	} else if !m.HasUID() {
 		return m
 	}
 
-	m.LastActive = unix.Time()
+	// Set time of last activity to now (Unix timestamp).
+	m.LastActive = unix.Now()
 
-	if err := Db().Model(m).UpdateColumn("LastActive", m.LastActive).Error; err != nil {
-		log.Debugf("client: failed to update %s timestamp (%s)", m.ClientUID, err)
+	// Update activity timestamp of this client in the auth_clients table.
+	if !save {
+		return m
+	} else if err := Db().Model(m).UpdateColumn("last_active", m.LastActive).Error; err != nil {
+		event.AuditWarn([]string{"client %s", "failed to update activity timestamp", "%s"}, m.ClientUID, err)
 	}
 
 	return m
 }
 
 // NewSession creates a new client session.
-func (m *Client) NewSession(c *gin.Context) *Session {
+func (m *Client) NewSession(c *gin.Context, t authn.GrantType) *Session {
 	// Create, initialize, and return new session.
-	return NewSession(m.AuthExpires, 0).SetContext(c).SetClient(m)
+	return NewSession(m.AuthExpires, 0).SetContext(c).SetClient(m).SetGrantType(t)
 }
 
 // EnforceAuthTokenLimit deletes client sessions above the configured limit and returns the number of deleted sessions.
@@ -542,7 +553,7 @@ func (m *Client) SetFormValues(frm form.Client) *Client {
 
 	// Replace empty values with defaults.
 	if m.AuthProvider == "" {
-		m.AuthProvider = authn.ProviderClientCredentials.String()
+		m.AuthProvider = authn.ProviderClient.String()
 	}
 
 	if m.AuthMethod == "" {

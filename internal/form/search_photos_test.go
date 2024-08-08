@@ -1,10 +1,16 @@
 package form
 
 import (
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 
 	"github.com/photoprism/photoprism/pkg/txt"
 )
@@ -655,20 +661,31 @@ func TestParseQueryString(t *testing.T) {
 
 		assert.Equal(t, "200-500", form.Alt)
 	})
-	t.Run("query for before with invalid type", func(t *testing.T) {
+	t.Run("BeforeTime", func(t *testing.T) {
+		form := &SearchPhotos{Query: "before:time"}
+
+		err := form.ParseQueryString()
+
+		t.Logf("%s", form.Before)
+
+		if err != nil {
+			assert.Equal(t, "invalid before date", err.Error())
+		} else {
+			t.Fatal("'invalid before date' error expected")
+		}
+	})
+	t.Run("BeforeCat", func(t *testing.T) {
 		form := &SearchPhotos{Query: "before:cat"}
 
 		err := form.ParseQueryString()
 
-		if err == nil {
-			t.Fatal(err)
+		if err != nil {
+			assert.Equal(t, "invalid before date", err.Error())
+		} else {
+			t.Fatal("'invalid before date' error expected")
 		}
-
-		// log.Debugf("%+v\n", form)
-
-		assert.Equal(t, "Could not find format for \"cat\"", err.Error())
 	})
-	t.Run("query for after with invalid type", func(t *testing.T) {
+	t.Run("AfterCat", func(t *testing.T) {
 		form := &SearchPhotos{Query: "after:cat"}
 
 		err := form.ParseQueryString()
@@ -679,9 +696,9 @@ func TestParseQueryString(t *testing.T) {
 
 		// log.Debugf("%+v\n", form)
 
-		assert.Equal(t, "Could not find format for \"cat\"", err.Error())
+		assert.Equal(t, "invalid after date", err.Error())
 	})
-	t.Run("id", func(t *testing.T) {
+	t.Run("Id", func(t *testing.T) {
 		form := &SearchPhotos{Query: "id:\"ii3e4567-e89b-hdgtr\""}
 
 		err := form.ParseQueryString()
@@ -691,6 +708,68 @@ func TestParseQueryString(t *testing.T) {
 		}
 
 		assert.Equal(t, "ii3e4567-e89b-hdgtr", form.ID)
+	})
+	t.Run("Added", func(t *testing.T) {
+		form := &SearchPhotos{Query: "added:\"2022-01-02T13:04:05+01:00\""}
+
+		err := form.ParseQueryString()
+
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		assert.Equal(t, "2022-01-02 13:04:05 +0100 UTC+01:00", form.Added.String())
+		assert.Equal(t, "2022-01-02 12:04:05 +0000 UTC", form.Added.UTC().String())
+		assert.Equal(t, "2022-01-02T13:04:05+01:00", form.Added.Format(time.RFC3339))
+		assert.Equal(t, "2022-01-02T12:04:05Z", form.Added.UTC().Format(time.RFC3339))
+	})
+	t.Run("Updated", func(t *testing.T) {
+		form := &SearchPhotos{Query: "updated:\"2001-01-02 17:04:05\""}
+
+		err := form.ParseQueryString()
+
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		assert.Equal(t, "2001-01-02 17:04:05 +0000 UTC", form.Updated.String())
+		assert.Equal(t, "2001-01-02 17:04:05 +0000 UTC", form.Updated.UTC().String())
+		assert.Equal(t, "2001-01-02T17:04:05Z", form.Updated.Format(time.RFC3339))
+		assert.Equal(t, "2001-01-02T17:04:05Z", form.Updated.UTC().Format(time.RFC3339))
+	})
+	t.Run("MustBindWith", func(t *testing.T) {
+		form := &SearchPhotos{}
+
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		u, err := url.Parse("https://www.photoprism.app/api/v1/photos?count=100&offset=0&order=added&added=2022-01-02T13:04:05-01:00&updated=2001-01-02T17:04:05Z&q=")
+
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		c.Request = &http.Request{
+			Header: make(http.Header),
+			URL:    u,
+		}
+
+		// Abort if request params are invalid.
+		if err = c.MustBindWith(form, binding.Form); err != nil {
+			t.Fatal(err)
+		}
+
+		err = form.ParseQueryString()
+
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		assert.Equal(t, "added", form.Order)
+		assert.Equal(t, "2022-01-02T13:04:05-01:00", form.Added.Format(time.RFC3339))
+		assert.Equal(t, "2022-01-02T14:04:05Z", form.Added.UTC().Format(time.RFC3339))
+		assert.Equal(t, "2001-01-02T17:04:05Z", form.Updated.Format(time.RFC3339))
+		assert.Equal(t, 100, form.Count)
+		assert.Equal(t, 0, form.Offset)
 	})
 }
 

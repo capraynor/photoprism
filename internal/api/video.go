@@ -9,22 +9,27 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/photoprism/photoprism/internal/entity"
-	"github.com/photoprism/photoprism/internal/get"
+	"github.com/photoprism/photoprism/internal/entity/query"
 	"github.com/photoprism/photoprism/internal/photoprism"
-	"github.com/photoprism/photoprism/internal/query"
+	"github.com/photoprism/photoprism/internal/photoprism/get"
 	"github.com/photoprism/photoprism/pkg/clean"
 	"github.com/photoprism/photoprism/pkg/fs"
-	"github.com/photoprism/photoprism/pkg/video"
+	"github.com/photoprism/photoprism/pkg/media/video"
 )
 
-// GetVideo streams video content.
+// GetVideo returns a video, optionally limited to a byte range for streaming.
 //
-// The request parameters are:
-//
-//   - hash: string The photo or video file hash as returned by the search API
-//   - type: string Video format
-//
-// GET /api/v1/videos/:hash/:token/:type
+//		@Summary	returns a video, optionally limited to a byte range for streaming
+//		@Description Fore more information see:
+//	 @Description - https://docs.photoprism.app/developer-guide/api/thumbnails/#video-endpoint-uri
+//		@Id			GetVideo
+//		@Produce	video/mp4
+//		@Tags		Files, Videos
+//		@Failure	403	{object}	i18n.Response
+//		@Param		thumb path string true "SHA1 video file hash"
+//		@Param		token path string true "user-specific security token provided with session"
+//		@Param		format path string true "video format, e.g. mp4"
+//		@Router		/api/v1/videos/{hash}/{token}/{format} [get]
 func GetVideo(router *gin.RouterGroup) {
 	router.GET("/videos/:hash/:token/:format", func(c *gin.Context) {
 		if InvalidPreviewToken(c) {
