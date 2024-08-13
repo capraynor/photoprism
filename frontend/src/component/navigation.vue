@@ -227,6 +227,19 @@
           </v-list-tile-content>
         </v-list-tile>
 
+        
+        <v-list-tile :to="{ name: 'timeline' }" class="nav-timeline" @click.stop="">
+          <v-list-tile-action :title="$gettext('Timeline')">
+            <v-icon>timeline</v-icon>
+          </v-list-tile-action>
+
+          <v-list-tile-content>
+            <v-list-tile-title class="p-flex-menuitem">
+              <translate key="Timeline">Timeline</translate>
+            </v-list-tile-title>
+          </v-list-tile-content>
+        </v-list-tile>
+
         <v-list-tile v-show="$config.feature('favorites')" :to="{ name: 'favorites' }" class="nav-favorites" @click.stop="">
           <v-list-tile-action :title="$gettext('Favorites')">
             <v-icon>favorite</v-icon>

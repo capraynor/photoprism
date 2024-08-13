@@ -24,6 +24,7 @@ Additional information can be found in our Developer Guide:
 */
 
 import Photos from "page/photos.vue";
+import Timeline from "page/timeline.vue";
 import Albums from "page/albums.vue";
 import AlbumPhotos from "page/album/photos.vue";
 import Places from "page/places.vue";
@@ -130,6 +131,21 @@ export default [
     name: "browse",
     path: "/browse",
     component: Photos,
+    meta: { title: siteTitle, icon: true, auth: true },
+    beforeEnter: (to, from, next) => {
+      if (session.loginRequired()) {
+        next({ name: "login" });
+      } else if (config.deny("photos", "search")) {
+        next({ name: "albums" });
+      } else {
+        next();
+      }
+    },
+  },
+  {
+    name: "timeline",
+    path: "/timeline",
+    component: Timeline,
     meta: { title: siteTitle, icon: true, auth: true },
     beforeEnter: (to, from, next) => {
       if (session.loginRequired()) {
