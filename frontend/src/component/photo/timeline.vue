@@ -257,9 +257,8 @@
           }
         },
       headingHeight() {
-        const toolbarHeight = document.querySelector(".p-photo-toolbar").scrollHeight;
         const titleHeight = document.querySelector(".timeline-title").scrollHeight;
-        return toolbarHeight + titleHeight;
+        return titleHeight;
       },
 
       timelineTitle(){

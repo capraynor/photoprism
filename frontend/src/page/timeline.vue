@@ -1,19 +1,5 @@
 <template>
-    <div v-infinite-scroll="loadMore" :class="$config.aclClasses('photos')" class="p-page p-page-photos" style="user-select: none"
-         :infinite-scroll-disabled="scrollDisabled" :infinite-scroll-distance="scrollDistance"
-         :infinite-scroll-listen-for-event="'scrollRefresh'">
-  
-      <p-photo-toolbar
-        :context="context"
-        :filter="filter"
-        :static-filter="staticFilter"
-        :settings="settings"
-        :refresh="refresh"
-        :update-filter="updateFilter"
-        :update-query="updateQuery"
-        :on-close="onClose"
-        :embedded="embedded"
-      />
+    <div :class="$config.aclClasses('photos')" class="p-page p-page-photos" style="user-select: none">
   
       <v-container v-if="loading" fluid class="pa-4">
         <v-progress-linear color="secondary-dark" :indeterminate="true"></v-progress-linear>
@@ -234,8 +220,8 @@
       }));
   
   
-      this.subscriptions.push(Event.subscribe("touchmove.top", () => this.refresh()));
-      this.subscriptions.push(Event.subscribe("touchmove.bottom", () => this.loadMore()));
+      // this.subscriptions.push(Event.subscribe("touchmove.top", () => this.refresh()));
+      // this.subscriptions.push(Event.subscribe("touchmove.bottom", () => this.loadMore()));
     },
     destroyed() {
       for (let i = 0; i < this.subscriptions.length; i++) {
@@ -404,63 +390,63 @@
         this.listen = true;
       },
       loadMore() {
-        if (this.scrollDisabled || this.$scrollbar.disabled()) return;
+        // if (this.scrollDisabled || this.$scrollbar.disabled()) return;
   
-        this.scrollDisabled = true;
-        this.listen = false;
+        // this.scrollDisabled = true;
+        // this.listen = false;
   
-        if (this.dirty) {
-          this.viewer.dirty = true;
-        }
+        // if (this.dirty) {
+        //   this.viewer.dirty = true;
+        // }
   
-        const count = this.dirty ? (this.page + 2) * this.batchSize : this.batchSize;
-        const offset = this.dirty ? 0 : this.offset;
+        // const count = this.dirty ? (this.page + 2) * this.batchSize : this.batchSize;
+        // const offset = this.dirty ? 0 : this.offset;
   
-        const params = {
-          count: count,
-          offset: offset,
-          merged: true,
-        };
+        // const params = {
+        //   count: count,
+        //   offset: offset,
+        //   merged: true,
+        // };
   
-        Object.assign(params, this.lastFilter);
+        // Object.assign(params, this.lastFilter);
   
-        if (this.staticFilter) {
-          Object.assign(params, this.staticFilter);
-        }
-        Photo.search(params).then(response => {
-          this.results = this.dirty ? response.models : Photo.mergeResponse(this.results, response);
-          this.complete = (response.count < response.limit);
-          this.scrollDisabled = this.complete;
+        // if (this.staticFilter) {
+        //   Object.assign(params, this.staticFilter);
+        // }
+        // Photo.search(params).then(response => {
+        //   this.results = this.dirty ? response.models : Photo.mergeResponse(this.results, response);
+        //   this.complete = (response.count < response.limit);
+        //   this.scrollDisabled = this.complete;
   
-          if (this.complete) {
-            this.setOffset(response.offset);
+        //   if (this.complete) {
+        //     this.setOffset(response.offset);
   
-            if (!this.embedded && this.results.length > 1) {
-              this.$notify.info(this.$gettextInterpolate(this.$gettext("%{n} pictures found"), {n: this.results.length}));
-            }
-          } else if (this.results.length >= Photo.limit()) {
-            this.setOffset(response.offset);
-            this.complete = true;
-            this.scrollDisabled = true;
-            this.$notify.warn(this.$gettext("Can't load more, limit reached"));
-          } else {
-            this.setOffset(response.offset + response.limit);
-            this.offset = offset + count;
-            this.page++;
+        //     if (!this.embedded && this.results.length > 1) {
+        //       this.$notify.info(this.$gettextInterpolate(this.$gettext("%{n} pictures found"), {n: this.results.length}));
+        //     }
+        //   } else if (this.results.length >= Photo.limit()) {
+        //     this.setOffset(response.offset);
+        //     this.complete = true;
+        //     this.scrollDisabled = true;
+        //     this.$notify.warn(this.$gettext("Can't load more, limit reached"));
+        //   } else {
+        //     this.setOffset(response.offset + response.limit);
+        //     this.offset = offset + count;
+        //     this.page++;
   
-            this.$nextTick(() => {
-              if (this.$root.$el.clientHeight <= window.document.documentElement.clientHeight + 300) {
-                this.$emit("scrollRefresh");
-              }
-            });
-          }
-        }).catch(() => {
-          this.scrollDisabled = false;
-        }).finally(() => {
-          this.dirty = false;
-          this.loading = false;
-          this.listen = true;
-        });
+        //     this.$nextTick(() => {
+        //       if (this.$root.$el.clientHeight <= window.document.documentElement.clientHeight + 300) {
+        //         this.$emit("scrollRefresh");
+        //       }
+        //     });
+        //   }
+        // }).catch(() => {
+        //   this.scrollDisabled = false;
+        // }).finally(() => {
+        //   this.dirty = false;
+        //   this.loading = false;
+        //   this.listen = true;
+        // });
       },
       updateSettings(props) {
         if (!props || typeof props !== "object" || props.target) {
