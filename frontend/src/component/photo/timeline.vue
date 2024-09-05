@@ -6,7 +6,7 @@
         </div>
         <div ref="container" :style="{height: `${this.height}px`}" grid-list-xs fluid class="p-photos p-photo-mosaic p-photo-timeline">
 
-<div v-if="totalCount === 0" class="pa-0">
+<div v-if="totalCount === 0">
   <v-alert
       :value="true"
       color="secondary-dark"
@@ -14,24 +14,13 @@
       class="no-results ma-2 opacity-70"
       outline
   >
-    <h3 v-if="filter.order === 'edited'" class="body-2 ma-0 pa-0">
-      <translate>No recently edited pictures</translate>
-    </h3>
-    <h3 v-else class="body-2 ma-0 pa-0">
+    <h3>
       <translate>No pictures found</translate>
     </h3>
-    <p class="body-1 mt-2 mb-0 pa-0">
-      <translate>Try again using other filters or keywords.</translate>
-      <template v-if="!isSharedView">
-        <translate>In case pictures you expect are missing, please rescan your library and wait until indexing has been completed.</translate>
-        <template v-if="$config.feature('review')">
-          <translate>Non-photographic and low-quality images require a review before they appear in search results.</translate>
-        </template>
-      </template>
-    </p>
+
   </v-alert>
 </div>
-<v-layout row wrap class="search-results photo-results mosaic-view timeline-view" :class="{'select-results': selectMode}">
+<div class="search-results photo-results mosaic-view timeline-view" :class="{'select-results': selectMode}">
 
   <div
       v-for="(photo, index) in photos"
@@ -66,12 +55,12 @@
             @click.stop.prevent="onClick($event, index)"
             @mouseover="playLive(photo)"
             @mouseleave="pauseLive(photo)">
-        <v-layout v-if="photo.Type === 'live' || photo.Type === 'animated'" class="live-player">
+        <div v-if="photo.Type === 'live' || photo.Type === 'animated'" class="live-player">
           <video :id="'live-player-' + photo.ID" :key="photo.ID" width="224" height="224" preload="none"
                  loop muted playsinline>
             <source :src="photo.videoUrl()">
           </video>
-        </v-layout>
+        </div>
 
         <button v-if="photo.Type !== 'image' || photo.isStack()"
               class="input-open"
@@ -135,7 +124,7 @@
       </div>
     </div>
   </div>
-</v-layout>
+</div>
 <p-photo-time-wheel
   :ids="ids"
   :photos="photos"

@@ -1,10 +1,10 @@
 <template>
-    <div :class="$config.aclClasses('photos')" class="p-page p-page-photos" style="user-select: none">
+    <div :class="$config.aclClasses('photos')" style="user-select: none">
   
-      <v-container v-if="loading" fluid class="pa-4">
+      <div v-if="loading" class="pa-4">
         <v-progress-linear color="secondary-dark" :indeterminate="true"></v-progress-linear>
-      </v-container>
-      <v-container v-else fluid class="pa-0">
+      </div>
+      <div v-else>
         <p-scroll-top></p-scroll-top>
   
         <p-photo-clipboard :context="context" :refresh="refresh" :selection="selection"></p-photo-clipboard>
@@ -17,10 +17,9 @@
                        :total-count="totalCount"
                        :open-photo="openPhoto"
                        :edit-photo="editPhoto"
-                       :open-location="openLocation"
                        :ensure-photo-loaded="ensurePhotoLoaded"
                        :is-shared-view="isShared"></p-photo-timeline>
-      </v-container>
+      </div>
     </div>
   </template>
   
@@ -150,55 +149,55 @@
       }
     },
     watch: {
-      '$route'() {
-        const query = this.$route.query;
+      // '$route'() {
+      //   const query = this.$route.query;
   
-        const settings = this.$config.settings();
+      //   const settings = this.$config.settings();
   
-        if (settings.features) {
-          if (settings.features.private) {
-            this.filter.public = "true";
-          }
+      //   if (settings.features) {
+      //     if (settings.features.private) {
+      //       this.filter.public = "true";
+      //     }
   
-          if (settings.features.review && (!this.staticFilter || !("quality" in this.staticFilter))) {
-            this.filter.quality = "3";
-          }
-        }
+      //     if (settings.features.review && (!this.staticFilter || !("quality" in this.staticFilter))) {
+      //       this.filter.quality = "3";
+      //     }
+      //   }
   
-        this.filter.q = query['q'] ? query['q'] : '';
-        this.filter.camera = query['camera'] ? parseInt(query['camera']) : 0;
-        this.filter.country = query['country'] ? query['country'] : '';
-        this.filter.lens = query['lens'] ? parseInt(query['lens']) : 0;
-        this.filter.year = query['year'] ? parseInt(query['year']) : 0;
-        this.filter.month = query['month'] ? parseInt(query['month']) : 0;
-        this.filter.color = query['color'] ? query['color'] : '';
-        this.filter.label = query['label'] ? query['label'] : '';
-        this.filter.latlng = query['latlng'] ? query['latlng'] : '';
-        this.filter.order = this.sortOrder();
+      //   this.filter.q = query['q'] ? query['q'] : '';
+      //   this.filter.camera = query['camera'] ? parseInt(query['camera']) : 0;
+      //   this.filter.country = query['country'] ? query['country'] : '';
+      //   this.filter.lens = query['lens'] ? parseInt(query['lens']) : 0;
+      //   this.filter.year = query['year'] ? parseInt(query['year']) : 0;
+      //   this.filter.month = query['month'] ? parseInt(query['month']) : 0;
+      //   this.filter.color = query['color'] ? query['color'] : '';
+      //   this.filter.label = query['label'] ? query['label'] : '';
+      //   this.filter.latlng = query['latlng'] ? query['latlng'] : '';
+      //   this.filter.order = this.sortOrder();
   
-        this.settings.view = this.viewType();
+      //   this.settings.view = this.viewType();
   
-        /**
-        * Even if the filter is unchanged, if the route is changed (for example
-        * from `/review` to `/browse`), then the lastFilter must be reset, so that
-        * a new search is actually triggered. That is because both routes use
-        * this component, so it is reused by vue. See
-        * https://github.com/photoprism/photoprism/pull/2782#issuecomment-1279821448.
-        *
-        * However, if the route is unchanged, the not resetting lastFilter prevents
-        * unnecessary search-api-calls! These search-calls would otherwise reset
-        * the view, even if we for example just returned from a fullscreen-download
-        * in the ios-pwa. See
-        * https://github.com/photoprism/photoprism/pull/2782#issue-1409954466
-        */
-        const routeChanged = this.routeName !== this.$route.name;
-        if (routeChanged) {
-          this.lastFilter = {};
-        }
+      //   /**
+      //   * Even if the filter is unchanged, if the route is changed (for example
+      //   * from `/review` to `/browse`), then the lastFilter must be reset, so that
+      //   * a new search is actually triggered. That is because both routes use
+      //   * this component, so it is reused by vue. See
+      //   * https://github.com/photoprism/photoprism/pull/2782#issuecomment-1279821448.
+      //   *
+      //   * However, if the route is unchanged, the not resetting lastFilter prevents
+      //   * unnecessary search-api-calls! These search-calls would otherwise reset
+      //   * the view, even if we for example just returned from a fullscreen-download
+      //   * in the ios-pwa. See
+      //   * https://github.com/photoprism/photoprism/pull/2782#issue-1409954466
+      //   */
+      //   const routeChanged = this.routeName !== this.$route.name;
+      //   if (routeChanged) {
+      //     this.lastFilter = {};
+      //   }
   
-        this.routeName = this.$route.name;
-        this.search();
-      }
+      //   this.routeName = this.$route.name;
+      //   this.search();
+      // }
     },
     created() {
       if (this.settings.view == "timeline"){
@@ -220,8 +219,6 @@
       }));
   
   
-      // this.subscriptions.push(Event.subscribe("touchmove.top", () => this.refresh()));
-      // this.subscriptions.push(Event.subscribe("touchmove.bottom", () => this.loadMore()));
     },
     destroyed() {
       for (let i = 0; i < this.subscriptions.length; i++) {
@@ -288,25 +285,6 @@
   
         return 'newest';
       },
-      openLocation(index) {
-        if (!this.hasPlaces || !this.canSearchPlaces) {
-          return;
-        }
-  
-        const photo = this.results[index];
-  
-        if (!photo) {
-          return;
-        }
-  
-        if (photo.CellID && photo.CellID !== "zz") {
-          this.$router.push({name: "places", query: {q: photo.CellID}});
-        } else if (photo.Country && photo.Country !== "zz") {
-          this.$router.push({name: "places", query: {q: "country:" + photo.Country}});
-        } else {
-          this.$notify.warn("unknown location");
-        }
-      },
       editPhoto(index) {
         if (!this.canEdit) {
           return this.openPhoto(index);
@@ -364,7 +342,6 @@
         const count = end - start + 1;
         const defaultParams = this.searchParams();
         const params = {
-            ...this.filter,
             ...this.staticFilter,
             count: count,
             offset: start,
@@ -389,65 +366,6 @@
         this.loading = false;
         this.listen = true;
       },
-      loadMore() {
-        // if (this.scrollDisabled || this.$scrollbar.disabled()) return;
-  
-        // this.scrollDisabled = true;
-        // this.listen = false;
-  
-        // if (this.dirty) {
-        //   this.viewer.dirty = true;
-        // }
-  
-        // const count = this.dirty ? (this.page + 2) * this.batchSize : this.batchSize;
-        // const offset = this.dirty ? 0 : this.offset;
-  
-        // const params = {
-        //   count: count,
-        //   offset: offset,
-        //   merged: true,
-        // };
-  
-        // Object.assign(params, this.lastFilter);
-  
-        // if (this.staticFilter) {
-        //   Object.assign(params, this.staticFilter);
-        // }
-        // Photo.search(params).then(response => {
-        //   this.results = this.dirty ? response.models : Photo.mergeResponse(this.results, response);
-        //   this.complete = (response.count < response.limit);
-        //   this.scrollDisabled = this.complete;
-  
-        //   if (this.complete) {
-        //     this.setOffset(response.offset);
-  
-        //     if (!this.embedded && this.results.length > 1) {
-        //       this.$notify.info(this.$gettextInterpolate(this.$gettext("%{n} pictures found"), {n: this.results.length}));
-        //     }
-        //   } else if (this.results.length >= Photo.limit()) {
-        //     this.setOffset(response.offset);
-        //     this.complete = true;
-        //     this.scrollDisabled = true;
-        //     this.$notify.warn(this.$gettext("Can't load more, limit reached"));
-        //   } else {
-        //     this.setOffset(response.offset + response.limit);
-        //     this.offset = offset + count;
-        //     this.page++;
-  
-        //     this.$nextTick(() => {
-        //       if (this.$root.$el.clientHeight <= window.document.documentElement.clientHeight + 300) {
-        //         this.$emit("scrollRefresh");
-        //       }
-        //     });
-        //   }
-        // }).catch(() => {
-        //   this.scrollDisabled = false;
-        // }).finally(() => {
-        //   this.dirty = false;
-        //   this.loading = false;
-        //   this.listen = true;
-        // });
-      },
       updateSettings(props) {
         if (!props || typeof props !== "object" || props.target) {
           return;
@@ -468,47 +386,47 @@
           window.localStorage.setItem("photos_"+key, this.settings[key]);
         }
       },
-      updateFilter(props) {
-        if (!props || typeof props !== "object" || props.target) {
-          return;
-        }
+      // updateFilter(props) {
+      //   if (!props || typeof props !== "object" || props.target) {
+      //     return;
+      //   }
   
-        for (const [key, value] of Object.entries(props)) {
-          if (!this.filter.hasOwnProperty(key)) {
-            continue;
-          }
-          switch (typeof value) {
-            case "string":
-              this.filter[key] = value.trim();
-              break;
-            default:
-              this.filter[key] = value;
-          }
-        }
-      },
-      updateQuery(props) {
-        this.updateFilter(props);
+      //   for (const [key, value] of Object.entries(props)) {
+      //     if (!this.filter.hasOwnProperty(key)) {
+      //       continue;
+      //     }
+      //     switch (typeof value) {
+      //       case "string":
+      //         this.filter[key] = value.trim();
+      //         break;
+      //       default:
+      //         this.filter[key] = value;
+      //     }
+      //   }
+      // },
+      // updateQuery(props) {
+      //   this.updateFilter(props);
   
-        if (this.loading) return;
+      //   if (this.loading) return;
   
-        const query = {
-          view: this.settings.view
-        };
+      //   const query = {
+      //     view: this.settings.view
+      //   };
   
-        Object.assign(query, this.filter);
+      //   Object.assign(query, this.filter);
   
-        for (let key in query) {
-          if (query[key] === undefined || !query[key]) {
-            delete query[key];
-          }
-        }
+      //   for (let key in query) {
+      //     if (query[key] === undefined || !query[key]) {
+      //       delete query[key];
+      //     }
+      //   }
   
-        if (JSON.stringify(this.$route.query) === JSON.stringify(query)) {
-          return;
-        }
+      //   if (JSON.stringify(this.$route.query) === JSON.stringify(query)) {
+      //     return;
+      //   }
   
-        this.$router.replace({query});
-      },
+      //   this.$router.replace({query});
+      // },
       searchParams() {
         const params = {
           count: this.searchCount(),
@@ -539,7 +457,6 @@
           this.complete = false;
           this.scrollDisabled = false;
   
-          this.loadMore();
         }
       },
       search() {
@@ -563,12 +480,12 @@
         this.scrollDisabled = true;
   
         // Don't query the same data more than once
-        if (JSON.stringify(this.lastFilter) === JSON.stringify(this.filter)) {
-          this.$nextTick(() => this.$emit("scrollRefresh"));
-          return;
-        }
+        // if (JSON.stringify(this.lastFilter) === JSON.stringify(this.filter)) {
+        //   this.$nextTick(() => this.$emit("scrollRefresh"));
+        //   return;
+        // }
   
-        Object.assign(this.lastFilter, this.filter);
+        // Object.assign(this.lastFilter, this.filter);
   
         this.offset = 0;
         this.page = 0;
@@ -611,7 +528,6 @@
       onImportCompleted() {
         if (!this.listen) return;
   
-        this.loadMore();
       },
       updateResults(entity) {
         this.results.filter((m) => m.UID === entity.UID).forEach((m) => {
