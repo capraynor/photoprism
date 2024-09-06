@@ -23,6 +23,7 @@
 <div class="search-results photo-results mosaic-view timeline-view" :class="{'select-results': selectMode}">
 
   <div
+    class="timeline-view__item"
       v-for="(photo, index) in photos"
       v-if="photo && isPhotoVisible(index)"
       ref="items"
@@ -183,7 +184,7 @@
       },
       photosPerLine: {
         type: Number,
-        default: 10
+        default: 30
       },
       ensurePhotoLoaded: {
         type: Function,

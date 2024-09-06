@@ -24,6 +24,7 @@
   </template>
   
   <script>
+  import "css/timeline.css";
   import {MediaAnimated, MediaLive, MediaRaw, MediaVideo, Photo} from "model/photo";
   import Thumb from "model/thumb";
   import Viewer from "common/viewer";
